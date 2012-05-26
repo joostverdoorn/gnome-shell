@@ -220,7 +220,6 @@ const Overview = new Lang.Class({
         // TODO - recalculate everything when desktop size changes
         this._dash = new Dash.Dash();
         this._group.add_actor(this._dash.actor);
-        this._dash.actor.add_constraint(this._viewSelector.constrainY);
         this._dash.actor.add_constraint(this._viewSelector.constrainHeight);
         this.dashIconSize = this._dash.iconSize;
         this._dash.connect('icon-size-changed',
