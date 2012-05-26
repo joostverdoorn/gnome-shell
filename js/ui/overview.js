@@ -21,6 +21,7 @@ const Panel = imports.ui.panel;
 const Params = imports.misc.params;
 const PlaceDisplay = imports.ui.placeDisplay;
 const RemoteSearch = imports.ui.remoteSearch;
+const SearchEntry = imports.ui.searchEntry;
 const Tweener = imports.ui.tweener;
 const ViewSelector = imports.ui.viewSelector;
 const Wanda = imports.ui.wanda;
@@ -192,6 +193,9 @@ const Overview = new Lang.Class({
             return;
 
         this._shellInfo = new ShellInfo();
+
+        this._searchEntry = new SearchEntry.SearchEntry();
+        this._group.add_actor(this._searchEntry.actor);
 
         this._viewSelector = new ViewSelector.ViewSelector();
         this._group.add_actor(this._viewSelector.actor);
@@ -502,13 +506,13 @@ const Overview = new Lang.Class({
         this._coverPane.set_position(0, contentY);
         this._coverPane.set_size(primary.width, contentHeight);
 
-        let dashWidth = Math.round(DASH_SPLIT_FRACTION * primary.width);
-        let viewWidth = primary.width - dashWidth - this._spacing;
-        let viewHeight = contentHeight - 2 * this._spacing;
-        let viewY = contentY + this._spacing;
-        let viewX = rtl ? 0 : dashWidth + this._spacing;
+        let searchWidth = this._searchEntry.actor.get_width();
+        let searchHeight = this._searchEntry.actor.get_height();
+        let searchX = (primary.width - searchWidth) / 2;
+        let searchY = contentY + this._spacing;       
 
-        // Set the dash's x position - y is handled by a constraint
+        let dashWidth = Math.round(DASH_SPLIT_FRACTION * primary.width);
+        let dashY = searchY + searchHeight + this._spacing;
         let dashX;
         if (rtl) {
             this._dash.actor.set_anchor_point_from_gravity(Clutter.Gravity.NORTH_EAST);
@@ -516,10 +520,16 @@ const Overview = new Lang.Class({
         } else {
             dashX = 0;
         }
-        this._dash.actor.set_x(dashX);
 
+        let viewX = rtl ? 0 : dashWidth + this._spacing;
+        let viewY = dashY;
+        let viewWidth = primary.width - dashWidth - this._spacing;
+        let viewHeight = contentHeight - (this._spacing + this._dash.actor.get_y()); 
+
+        this._searchEntry.actor.set_position(searchX, searchY);
+        this._dash.actor.set_position(dashX, dashY);
         this._viewSelector.actor.set_position(viewX, viewY);
-        this._viewSelector.actor.set_size(viewWidth, viewHeight);
+        this._viewSelector.actor.set_size(viewWidth, viewHeight);  
     },
 
     //// Public methods ////
