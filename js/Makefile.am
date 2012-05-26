@@ -80,6 +80,7 @@ nobase_dist_js_DATA = 	\
 	ui/scripting.js		\
 	ui/search.js		\
 	ui/searchDisplay.js	\
+    ui/searchEntry.js	\
 	ui/shellDBus.js		\
 	ui/statusIconDispatcher.js	\
 	ui/status/accessibility.js	\
