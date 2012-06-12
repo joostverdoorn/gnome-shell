@@ -286,6 +286,88 @@ const RemoveFavoriteIcon = new Lang.Class({
     }
 });
 
+const ShowAppsIcon = new Lang.Class({
+    Name: 'ShowAppsIcon',
+    Extends: DashItemContainer,
+
+    _init: function() {
+        this.parent();
+
+        this._appsPageShown = false;
+        this._isHovered = false;
+
+        this._iconBin = new St.Button({ style_class: 'show-apps',
+                                        track_hover: true });
+        this._iconActor = null;
+        this.icon = new IconGrid.BaseIcon(_("Show Apps"),
+                                           { setSizeManually: true,
+                                             showLabel: false,
+                                             createIcon: Lang.bind(this, this._createIcon) });
+        this._iconBin.add_actor(this.icon.actor);
+        this._iconBin._delegate = this;
+
+        this.setChild(this._iconBin);
+
+        this._iconBin.connect('clicked',
+                              Lang.bind(this, function() {
+                                  this._toggleAppsPage();
+                              }));
+
+        Main.overview.connect('hidden',
+                              Lang.bind(this, function() {
+                                  this._appsPageShown = false;
+                                  this._iconBin.remove_style_pseudo_class('selected');
+                              }));
+    },
+
+    _createIcon: function(size) {
+        this._iconActor = new St.Icon({ icon_name: 'view-grid-symbolic',
+                                        style_class: 'show-apps-icon',
+                                        track_hover: true,
+                                        icon_type: St.IconType.SYMBOLIC,
+                                        icon_size: size });
+        return this._iconActor;
+    },
+
+    // Rely on the dragged item being a favorite
+    handleDragOver: function(source, actor, x, y, time) {
+        return DND.DragMotionResult.MOVE_DROP;
+    },
+
+    acceptDrop: function(source, actor, x, y, time) {
+        let app = null;
+        if (source instanceof AppDisplay.AppWellIcon) {
+            let appSystem = Shell.AppSystem.get_default();
+            app = appSystem.lookup_app(source.getId());
+        } else if (source.metaWindow) {
+            let tracker = Shell.WindowTracker.get_default();
+            app = tracker.get_window_app(source.metaWindow);
+        }
+
+        let id = app.get_id();
+
+        Meta.later_add(Meta.LaterType.BEFORE_REDRAW, Lang.bind(this,
+            function () {
+                AppFavorites.getAppFavorites().removeFavorite(id);
+                return false;
+            }));
+
+        return true;
+    },
+
+    _toggleAppsPage: function() {
+        Main.overview.viewSelector.toggleAppsPage();
+
+        if(!this._appsPageShown) {
+            this._iconBin.add_style_pseudo_class('selected');
+            this._appsPageShown = true;
+        } else {
+            this._iconBin.remove_style_pseudo_class('selected');
+            this._appsPageShown = false;
+        }
+    }
+});
+
 const DragPlaceholderItem = new Lang.Class({
     Name: 'DragPlaceholderItem',
     Extends: DashItemContainer,
@@ -312,18 +394,45 @@ const Dash = new Lang.Class({
         this._resetHoverTimeoutId = 0;
         this._labelShowing = false;
 
-        this._box = new St.BoxLayout({ name: 'dash',
-                                       vertical: true,
+        this._container = new St.BoxLayout({ name: 'dash',
+                                             vertical: true,
+                                             clip_to_allocation: true });
+
+        this._box = new St.BoxLayout({ vertical: true,
                                        clip_to_allocation: true });
         this._box._delegate = this;
+        this._container.add(this._box);
+        
+        this._showAppsIcon = new ShowAppsIcon();
+        this._showAppsIcon.icon.setIconSize(this.iconSize);
 
-        this.actor = new St.Bin({ y_align: St.Align.START, child: this._box });
+        
+
+        this._container.add(this._showAppsIcon.actor);
+
+        /*this._appsIcon = new St.Icon({ style_class: 'app-well-app',
+                                       icon_name: 'view-grid-symbolic',
+                                       icon_type: St.IconType.SYMBOLIC });
+
+        this._appsToggle = new St.Button({ style_class: 'dash-apps-toggle' });
+        this._appsToggle.add_actor(this._appsIcon);
+        this._container.add(this._appsToggle);*/
+
+        this.actor = new St.Bin({ child: this._container });
         this.actor.connect('notify::height', Lang.bind(this,
             function() {
                 if (this._maxHeight != this.actor.height)
                     this._queueRedisplay();
                 this._maxHeight = this.actor.height;
             }));
+
+        /*this._appsIcon.set_size(this.iconSize, this.iconSize);
+        this._appsIcon.show();
+        this._appsPageShown = false;
+        this._appsToggle.connect('clicked',
+                                 Lang.bind(this, function() {
+                                     this._toggleAppsPage();
+                                 }));*/
 
         this._workId = Main.initializeDeferredWork(this._box, Lang.bind(this, this._redisplay));
 
@@ -334,12 +443,12 @@ const Dash = new Lang.Class({
         AppFavorites.getAppFavorites().connect('changed', Lang.bind(this, this._queueRedisplay));
         this._appSystem.connect('app-state-changed', Lang.bind(this, this._queueRedisplay));
 
-        Main.overview.connect('item-drag-begin',
+        /*Main.overview.connect('item-drag-begin',
                               Lang.bind(this, this._onDragBegin));
         Main.overview.connect('item-drag-end',
                               Lang.bind(this, this._onDragEnd));
         Main.overview.connect('item-drag-cancelled',
-                              Lang.bind(this, this._onDragCancelled));
+                              Lang.bind(this, this._onDragCancelled));*/
         Main.overview.connect('window-drag-begin',
                               Lang.bind(this, this._onDragBegin));
         Main.overview.connect('window-drag-cancelled',
@@ -563,6 +672,8 @@ const Dash = new Lang.Class({
         this.iconSize = newIconSize;
         this.emit('icon-size-changed');
 
+        this._showAppsIcon.icon.setIconSize(this.iconSize);
+
         let scale = oldIconSize / newIconSize;
         for (let i = 0; i < iconChildren.length; i++) {
             let icon = iconChildren[i]._delegate.child._delegate.icon;
@@ -719,6 +830,10 @@ const Dash = new Lang.Class({
 
         for (let i = 0; i < addedItems.length; i++)
             addedItems[i].item.animateIn();
+
+        let y = (this._maxHeight - this._container.get_height()) / 2;
+        log(y);
+        this._container.set_position(0, y);
     },
 
     _clearDragPlaceholder: function() {
