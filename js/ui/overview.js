@@ -10,8 +10,6 @@ const St = imports.gi.St;
 const Shell = imports.gi.Shell;
 const Gdk = imports.gi.Gdk;
 
-const AppDisplay = imports.ui.appDisplay;
-const ContactDisplay = imports.ui.contactDisplay;
 const Dash = imports.ui.dash;
 const DND = imports.ui.dnd;
 const Lightbox = imports.ui.lightbox;
@@ -19,13 +17,10 @@ const Main = imports.ui.main;
 const MessageTray = imports.ui.messageTray;
 const Panel = imports.ui.panel;
 const Params = imports.misc.params;
-const PlaceDisplay = imports.ui.placeDisplay;
 const RemoteSearch = imports.ui.remoteSearch;
 const SearchEntry = imports.ui.searchEntry;
 const Tweener = imports.ui.tweener;
 const ViewSelector = imports.ui.viewSelector;
-const Wanda = imports.ui.wanda;
-const WorkspacesView = imports.ui.workspacesView;
 const WorkspaceThumbnail = imports.ui.workspaceThumbnail;
 
 // Time for initial animation going into Overview mode
@@ -146,8 +141,6 @@ const Overview = new Lang.Class({
         this._capturedEventId = 0;
         this._buttonPressId = 0;
 
-        this._workspacesDisplay = null;
-
         this.visible = false;           // animating to overview, in overview, animating out
         this._shown = false;            // show() and not hide()
         this._shownTemporarily = false; // showTemporarily() and not hideTemporarily()
@@ -197,22 +190,8 @@ const Overview = new Lang.Class({
         this._searchEntry = new SearchEntry.SearchEntry();
         this._group.add_actor(this._searchEntry.actor);
 
-        this._viewSelector = new ViewSelector.ViewSelector();
-        this._group.add_actor(this._viewSelector.actor);
-
-        this._workspacesDisplay = new WorkspacesView.WorkspacesDisplay();
-        this._viewSelector.addViewTab('windows', _("Windows"), this._workspacesDisplay.actor, 'text-x-generic');
-
-        let appView = new AppDisplay.AllAppDisplay();
-        this._viewSelector.addViewTab('applications', _("Applications"), appView.actor, 'system-run');
-
-        // Default search providers
-        // Wanda comes obviously first
-        this.addSearchProvider(new Wanda.WandaSearchProvider());
-        this.addSearchProvider(new AppDisplay.AppSearchProvider());
-        this.addSearchProvider(new AppDisplay.SettingsSearchProvider());
-        this.addSearchProvider(new PlaceDisplay.PlaceSearchProvider());
-        this.addSearchProvider(new ContactDisplay.ContactSearchProvider());
+        this.viewSelector = new ViewSelector.ViewSelector();
+        this._group.add_actor(this.viewSelector.actor);
 
         // Load remote search providers provided by applications
         RemoteSearch.loadRemoteSearchProviders(Lang.bind(this, this.addSearchProvider));
@@ -220,7 +199,7 @@ const Overview = new Lang.Class({
         // TODO - recalculate everything when desktop size changes
         this._dash = new Dash.Dash();
         this._group.add_actor(this._dash.actor);
-        this._dash.actor.add_constraint(this._viewSelector.constrainHeight);
+        this._dash.actor.add_constraint(this.viewSelector.constrainHeight);
         this.dashIconSize = this._dash.iconSize;
         this._dash.connect('icon-size-changed',
                            Lang.bind(this, function() {
@@ -236,11 +215,11 @@ const Overview = new Lang.Class({
     },
 
     addSearchProvider: function(provider) {
-        this._viewSelector.addSearchProvider(provider);
+        this.viewSelector.addSearchProvider(provider);
     },
 
     removeSearchProvider: function(provider) {
-        this._viewSelector.removeSearchProvider(provider);
+        this.viewSelector.removeSearchProvider(provider);
     },
 
     setMessage: function(text, undoCallback, undoLabel) {
@@ -523,12 +502,12 @@ const Overview = new Lang.Class({
         let viewX = rtl ? 0 : dashWidth + this._spacing;
         let viewY = dashY;
         let viewWidth = primary.width - dashWidth - this._spacing;
-        let viewHeight = contentHeight - (this._spacing + this._dash.actor.get_y()); 
+        let viewHeight = contentHeight - this._spacing - viewY; 
 
         this._searchEntry.actor.set_position(searchX, searchY);
         this._dash.actor.set_position(dashX, dashY);
-        this._viewSelector.actor.set_position(viewX, viewY);
-        this._viewSelector.actor.set_size(viewWidth, viewHeight);  
+        this.viewSelector.actor.set_position(viewX, viewY);
+        this.viewSelector.actor.set_size(viewWidth, viewHeight);  
     },
 
     //// Public methods ////
@@ -596,21 +575,6 @@ const Overview = new Lang.Class({
         global.window_group.hide();
         this._group.show();
         this._background.show();
-
-        this._workspacesDisplay.show();
-
-        if (!this._desktopFade.child)
-            this._desktopFade.child = this._getDesktopClone();
-
-        if (!this._workspacesDisplay.activeWorkspaceHasMaximizedWindows()) {
-            this._desktopFade.opacity = 255;
-            this._desktopFade.show();
-            Tweener.addTween(this._desktopFade,
-                             { opacity: 0,
-                               time: ANIMATION_TIME,
-                               transition: 'easeOutQuad'
-                             });
-        }
 
         this._group.opacity = 0;
         Tweener.addTween(this._group,
@@ -737,17 +701,6 @@ const Overview = new Lang.Class({
         this.animationInProgress = true;
         this._hideInProgress = true;
 
-        if (!this._workspacesDisplay.activeWorkspaceHasMaximizedWindows()) {
-            this._desktopFade.opacity = 0;
-            this._desktopFade.show();
-            Tweener.addTween(this._desktopFade,
-                             { opacity: 255,
-                               time: ANIMATION_TIME,
-                               transition: 'easeOutQuad' });
-        }
-
-        this._workspacesDisplay.zoomFromOverview();
-
         // Make other elements fade out.
         Tweener.addTween(this._group,
                          { opacity: 0,
@@ -770,7 +723,6 @@ const Overview = new Lang.Class({
 
     _showDone: function() {
         this.animationInProgress = false;
-        this._desktopFade.hide();
         this._coverPane.hide();
 
         this.emit('shown');
@@ -788,9 +740,6 @@ const Overview = new Lang.Class({
 
         global.window_group.show();
 
-        this._workspacesDisplay.hide();
-
-        this._desktopFade.hide();
         this._background.hide();
         this._group.hide();
 
