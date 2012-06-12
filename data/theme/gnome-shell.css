@@ -51,6 +51,7 @@ stage {
 .source-title,
 .app-well-app > .overview-icon,
 .remove-favorite > .overview-icon,
+.show-apps > .overview-icon,
 .search-result-content > .overview-icon {
     font-size: 9pt;
     font-weight: bold;
@@ -775,8 +776,11 @@ StScrollBar StButton#vhandle:hover
     icon-shadow: black 0px 2px 2px;
 }
 
+
+
 .app-well-app > .overview-icon,
 .remove-favorite > .overview-icon,
+.show-apps > .overview-icon,
 .search-result-content > .overview-icon {
     border-radius: 4px;
     padding: 3px;
@@ -793,9 +797,38 @@ StScrollBar StButton#vhandle:hover
 
 .app-well-app:hover > .overview-icon,
 .remove-favorite:hover > .overview-icon,
+.show-apps:hover > .overview-icon,
 .search-result-content:hover > .overview-icon {
     background-color: rgba(255,255,255,0.1);
     text-shadow: black 0px 2px 2px;
+    transition-duration: 100;
+    color:white;
+}
+
+.show-apps {
+    padding: 4px 0;
+}
+
+.show-apps-icon {
+    color: #a0a0a0;
+}
+
+.show-apps:hover .show-apps-icon {
+    color: white;
+}
+
+.show-apps:selected > .overview-icon {
+    background-gradient-start: rgba(255, 255, 255, .05);
+    background-gradient-end: rgba(255, 255, 255, .15);
+    background-gradient-direction: vertical;
+    border-radius: 4px;
+    box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 1);
+    transition-duration: 100;
+}
+
+.show-apps:selected .show-apps-icon {
+    color: white;
+    /*icon-shadow: black 0px 2px 2px;*/
     transition-duration: 100;
 }
 
