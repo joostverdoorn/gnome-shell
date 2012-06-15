@@ -112,6 +112,7 @@ const ViewSelector = new Lang.Class({
 
     show: function() {
         this._activePage = this._workspacesPage;
+        this._prevPage = null;
 
         this._appsPage.hide();
         this._searchPage.hide();
@@ -191,6 +192,7 @@ const ViewSelector = new Lang.Class({
                                onComplete: Lang.bind(this,
                                    function() {
                                        this._activePage.hide_all();
+                                       this._prevPage = this._activePage;
                                        this._activePage = page;
                                    })
                              });
@@ -204,11 +206,11 @@ const ViewSelector = new Lang.Class({
                          });
     },
 
-    toggleAppsPage: function() {
-        if(this._activePage == this._appsPage) {
-            this._showPage(this._workspacesPage);
-        } else {
+    toggleAppsPage: function(doShow) {
+        if(doShow || (doShow == undefined && this._activePage != this._appsPage)) {
             this._showPage(this._appsPage);
+        } else if(this._prevPage) {
+            this._showPage(this._prevPage);
         }
     },
 

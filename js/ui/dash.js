@@ -227,65 +227,6 @@ const DashItemContainer = new Lang.Class({
     }
 });
 
-const RemoveFavoriteIcon = new Lang.Class({
-    Name: 'RemoveFavoriteIcon',
-    Extends: DashItemContainer,
-
-    _init: function() {
-        this.parent();
-
-        this._iconBin = new St.Bin({ style_class: 'remove-favorite' });
-        this._iconActor = null;
-        this.icon = new IconGrid.BaseIcon(_("Remove"),
-                                           { setSizeManually: true,
-                                             showLabel: false,
-                                             createIcon: Lang.bind(this, this._createIcon) });
-        this._iconBin.set_child(this.icon.actor);
-        this._iconBin._delegate = this;
-
-        this.setChild(this._iconBin);
-    },
-
-    _createIcon: function(size) {
-        this._iconActor = new St.Icon({ icon_name: 'user-trash',
-                                        style_class: 'remove-favorite-icon',
-                                        icon_size: size });
-        return this._iconActor;
-    },
-
-    setHover: function(hovered) {
-        this._iconBin.set_hover(hovered);
-        if (this._iconActor)
-            this._iconActor.set_hover(hovered);
-    },
-
-    // Rely on the dragged item being a favorite
-    handleDragOver: function(source, actor, x, y, time) {
-        return DND.DragMotionResult.MOVE_DROP;
-    },
-
-    acceptDrop: function(source, actor, x, y, time) {
-        let app = null;
-        if (source instanceof AppDisplay.AppWellIcon) {
-            let appSystem = Shell.AppSystem.get_default();
-            app = appSystem.lookup_app(source.getId());
-        } else if (source.metaWindow) {
-            let tracker = Shell.WindowTracker.get_default();
-            app = tracker.get_window_app(source.metaWindow);
-        }
-
-        let id = app.get_id();
-
-        Meta.later_add(Meta.LaterType.BEFORE_REDRAW, Lang.bind(this,
-            function () {
-                AppFavorites.getAppFavorites().removeFavorite(id);
-                return false;
-            }));
-
-        return true;
-    }
-});
-
 const ShowAppsIcon = new Lang.Class({
     Name: 'ShowAppsIcon',
     Extends: DashItemContainer,
@@ -293,30 +234,29 @@ const ShowAppsIcon = new Lang.Class({
     _init: function() {
         this.parent();
 
-        this._appsPageShown = false;
         this._isHovered = false;
 
-        this._iconBin = new St.Button({ style_class: 'show-apps',
+        this._button = new St.Button({ style_class: 'show-apps',
                                         track_hover: true });
         this._iconActor = null;
         this.icon = new IconGrid.BaseIcon(_("Show Apps"),
                                            { setSizeManually: true,
                                              showLabel: false,
                                              createIcon: Lang.bind(this, this._createIcon) });
-        this._iconBin.add_actor(this.icon.actor);
-        this._iconBin._delegate = this;
+        this._button.add_actor(this.icon.actor);
+        this._button._delegate = this;
 
-        this.setChild(this._iconBin);
+        this.setChild(this._button);
 
-        this._iconBin.connect('clicked',
+        this._button.connect('clicked',
                               Lang.bind(this, function() {
-                                  this._toggleAppsPage();
+                                  this._toggleAppsPage(!this._button.get_checked());
                               }));
 
         Main.overview.connect('hidden',
                               Lang.bind(this, function() {
-                                  this._appsPageShown = false;
-                                  this._iconBin.remove_style_pseudo_class('selected');
+                                  this._toggleAppsPage(false);
+                                  this._button.remove_style_pseudo_class('selected');
                               }));
     },
 
@@ -355,16 +295,9 @@ const ShowAppsIcon = new Lang.Class({
         return true;
     },
 
-    _toggleAppsPage: function() {
-        Main.overview.viewSelector.toggleAppsPage();
-
-        if(!this._appsPageShown) {
-            this._iconBin.add_style_pseudo_class('selected');
-            this._appsPageShown = true;
-        } else {
-            this._iconBin.remove_style_pseudo_class('selected');
-            this._appsPageShown = false;
-        }
+    _toggleAppsPage: function(doShow) {
+        this._button.set_checked(doShow);
+        Main.overview.viewSelector.toggleAppsPage(doShow);
     }
 });
 
@@ -406,17 +339,7 @@ const Dash = new Lang.Class({
         this._showAppsIcon = new ShowAppsIcon();
         this._showAppsIcon.icon.setIconSize(this.iconSize);
 
-        
-
         this._container.add(this._showAppsIcon.actor);
-
-        /*this._appsIcon = new St.Icon({ style_class: 'app-well-app',
-                                       icon_name: 'view-grid-symbolic',
-                                       icon_type: St.IconType.SYMBOLIC });
-
-        this._appsToggle = new St.Button({ style_class: 'dash-apps-toggle' });
-        this._appsToggle.add_actor(this._appsIcon);
-        this._container.add(this._appsToggle);*/
 
         this.actor = new St.Bin({ child: this._container });
         this.actor.connect('notify::height', Lang.bind(this,
@@ -425,14 +348,6 @@ const Dash = new Lang.Class({
                     this._queueRedisplay();
                 this._maxHeight = this.actor.height;
             }));
-
-        /*this._appsIcon.set_size(this.iconSize, this.iconSize);
-        this._appsIcon.show();
-        this._appsPageShown = false;
-        this._appsToggle.connect('clicked',
-                                 Lang.bind(this, function() {
-                                     this._toggleAppsPage();
-                                 }));*/
 
         this._workId = Main.initializeDeferredWork(this._box, Lang.bind(this, this._redisplay));
 
@@ -443,12 +358,12 @@ const Dash = new Lang.Class({
         AppFavorites.getAppFavorites().connect('changed', Lang.bind(this, this._queueRedisplay));
         this._appSystem.connect('app-state-changed', Lang.bind(this, this._queueRedisplay));
 
-        /*Main.overview.connect('item-drag-begin',
+        Main.overview.connect('item-drag-begin',
                               Lang.bind(this, this._onDragBegin));
         Main.overview.connect('item-drag-end',
                               Lang.bind(this, this._onDragEnd));
         Main.overview.connect('item-drag-cancelled',
-                              Lang.bind(this, this._onDragCancelled));*/
+                              Lang.bind(this, this._onDragCancelled));
         Main.overview.connect('window-drag-begin',
                               Lang.bind(this, this._onDragBegin));
         Main.overview.connect('window-drag-cancelled',
@@ -479,14 +394,6 @@ const Dash = new Lang.Class({
 
     _endDrag: function() {
         this._clearDragPlaceholder();
-        if (this._favRemoveTarget) {
-            this._favRemoveTarget.animateOutAndDestroy();
-            this._favRemoveTarget.actor.connect('destroy', Lang.bind(this,
-                function() {
-                    this._favRemoveTarget = null;
-                }));
-            this._adjustIconSize();
-        }
         DND.removeDragMonitor(this._dragMonitor);
     },
 
@@ -505,28 +412,10 @@ const Dash = new Lang.Class({
 
         let srcIsFavorite = (id in favorites);
 
-        if (srcIsFavorite &&
-            app.get_state() != Shell.AppState.RUNNING &&
-            dragEvent.source.actor &&
-            this.actor.contains (dragEvent.source.actor) &&
-            this._favRemoveTarget == null) {
-                this._favRemoveTarget = new RemoveFavoriteIcon();
-                this._favRemoveTarget.icon.setIconSize(this.iconSize);
-                this._box.add(this._favRemoveTarget.actor);
-                this._adjustIconSize();
-                this._favRemoveTarget.animateIn();
-        }
-
         let favRemoveHovered = false;
-        if (this._favRemoveTarget)
-            favRemoveHovered =
-                this._favRemoveTarget.actor.contains(dragEvent.targetActor);
 
         if (!this._box.contains(dragEvent.targetActor) || favRemoveHovered)
             this._clearDragPlaceholder();
-
-        if (this._favRemoveTarget)
-            this._favRemoveTarget.setHover(favRemoveHovered);
 
         return DND.DragMotionResult.CONTINUE;
     },
@@ -613,18 +502,12 @@ const Dash = new Lang.Class({
                    !actor._delegate.animatingOut;
         });
 
-        if (iconChildren.length == 0) {
-            this._box.add_style_pseudo_class('empty');
-            return;
-        }
-
-        this._box.remove_style_pseudo_class('empty');
+        iconChildren.push(this._showAppsIcon.actor);
 
         if (this._maxHeight == -1)
             return;
 
-
-        let themeNode = this._box.get_theme_node();
+        let themeNode = this._container.get_theme_node();
         let maxAllocation = new Clutter.ActorBox({ x1: 0, y1: 0,
                                                    x2: 42 /* whatever */,
                                                    y2: this._maxHeight });
@@ -650,7 +533,6 @@ const Dash = new Lang.Class({
             [minHeight, natHeight] = iconChildren[0].get_preferred_height(-1);
         }
 
-
         // Subtract icon padding and box spacing from the available height
         availHeight -= iconChildren.length * (natHeight - this.iconSize) +
                        (iconChildren.length - 1) * spacing;
@@ -672,7 +554,7 @@ const Dash = new Lang.Class({
         this.iconSize = newIconSize;
         this.emit('icon-size-changed');
 
-        this._showAppsIcon.icon.setIconSize(this.iconSize);
+        //this._showAppsIcon.icon.setIconSize(this.iconSize);
 
         let scale = oldIconSize / newIconSize;
         for (let i = 0; i < iconChildren.length; i++) {
@@ -832,7 +714,6 @@ const Dash = new Lang.Class({
             addedItems[i].item.animateIn();
 
         let y = (this._maxHeight - this._container.get_height()) / 2;
-        log(y);
         this._container.set_position(0, y);
     },
 

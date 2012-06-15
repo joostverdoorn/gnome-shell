@@ -763,7 +763,7 @@ StScrollBar StButton#vhandle:hover
     outline: 1px solid #aaa;
 }
 
-.dash-item-container > .app-well-app {
+.dash-item-container > StButton {
     padding: 4px 8px;
 }
 
@@ -817,7 +817,7 @@ StScrollBar StButton#vhandle:hover
     color: white;
 }
 
-.show-apps:selected > .overview-icon {
+.show-apps:checked > .overview-icon {
     background-gradient-start: rgba(255, 255, 255, .05);
     background-gradient-end: rgba(255, 255, 255, .15);
     background-gradient-direction: vertical;
@@ -826,7 +826,7 @@ StScrollBar StButton#vhandle:hover
     transition-duration: 100;
 }
 
-.show-apps:selected .show-apps-icon {
+.show-apps:checked .show-apps-icon {
     color: white;
     /*icon-shadow: black 0px 2px 2px;*/
     transition-duration: 100;
