@@ -104,8 +104,6 @@ const ViewSelector = new Lang.Class({
         // to use position and height properties directly, outside code would
         // need to ensure that the content is properly allocated before
         // accessing the properties.
-        /*this.constrainY = new Clutter.BindConstraint({ source: this._pageArea,
-                                                       coordinate: Clutter.BindCoordinate.Y });*/
         this.constrainHeight = new Clutter.BindConstraint({ source: this._pageArea,
                                                             coordinate: Clutter.BindCoordinate.HEIGHT });
     },
@@ -139,6 +137,8 @@ const ViewSelector = new Lang.Class({
     },
 
     hide: function() {
+        this._showPage(this._workspacesPage);
+
         if (!this._workspacesDisplay.activeWorkspaceHasMaximizedWindows()) {
             this._desktopFade.opacity = 0;
             this._desktopFade.show();
@@ -220,7 +220,9 @@ const ViewSelector = new Lang.Class({
     },
 
     resetSearch: function() {
-        this._showPage(this._workspacesPage);
+        if(this._prevPage && this._prevPage != this._searchPage) {
+            this._showPage(this._prevPage);
+        }
     }
 });
 Signals.addSignalMethods(ViewSelector.prototype);

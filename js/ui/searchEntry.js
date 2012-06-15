@@ -33,10 +33,11 @@ const SearchEntry = new Lang.Class({
         this.actor.set_secondary_icon(this._inactiveIcon);
 
         this._text = this.actor.clutter_text;
-        this._text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
 
         this.active = false;
 
+        this._text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
+        this.actor.connect('notify::mapped', Lang.bind(this, this._onMapped));
 
         Main.overview.connect('showing', Lang.bind(this,
             function () {
@@ -88,7 +89,6 @@ const SearchEntry = new Lang.Class({
 
         this._text.set_cursor_visible(true);
         this._text.set_selection(0, 0);
-        log('reset');
         Main.overview.viewSelector.resetSearch();
     },
 
@@ -99,6 +99,21 @@ const SearchEntry = new Lang.Class({
 
     _isActivated: function() {
         return this._text.text == this.actor.get_text();
+    },
+
+    _onMapped: function() {
+        if (this.actor.mapped) {
+            // Enable 'find-as-you-type'
+            this._capturedEventId = global.stage.connect('captured-event',
+                                 Lang.bind(this, this._onCapturedEvent));
+            this._text.set_cursor_visible(true);
+            this._text.set_selection(0, 0);
+        } else {
+           // Disable 'find-as-you-type'
+            if (this._capturedEventId > 0)
+                global.stage.disconnect(this._capturedEventId);
+            this._capturedEventId = 0;
+        }
     },
 
     _onTextChanged: function (se, prop) {
@@ -124,7 +139,9 @@ const SearchEntry = new Lang.Class({
             this._iconClickedId = 0;
 
             this.actor.set_secondary_icon(this._inactiveIcon);
-            //this.emit('search-cancelled');
+            if(searchPreviouslyActive) {
+                this.reset();
+            }
         }
         if (!this.active) {
             if (this._searchTimeoutId > 0) {
@@ -204,6 +221,21 @@ const SearchEntry = new Lang.Class({
                 return true;
             }
         }
+        return false;
+    },
+
+    _onCapturedEvent: function(actor, event) {
+        if (event.type() == Clutter.EventType.BUTTON_PRESS) {
+            let source = event.get_source();
+            if (source != this._text && this._text.text == '' &&
+                !Main.layoutManager.keyboardBox.contains(source)) {
+                // the user clicked outside after activating the entry, but
+                // with no search term entered and no keyboard button pressed
+                // - cancel the search
+                this.reset();
+            }
+        }
+
         return false;
     },
 
