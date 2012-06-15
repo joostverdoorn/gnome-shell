@@ -139,6 +139,8 @@ const ViewSelector = new Lang.Class({
     },
 
     hide: function() {
+        this._showPage(this._workspacesPage);
+
         if (!this._workspacesDisplay.activeWorkspaceHasMaximizedWindows()) {
             this._desktopFade.opacity = 0;
             this._desktopFade.show();
@@ -220,7 +222,9 @@ const ViewSelector = new Lang.Class({
     },
 
     resetSearch: function() {
-        this._showPage(this._workspacesPage);
+        if(this._prevPage && this._prevPage != this._searchPage) {
+            this._showPage(this._prevPage);
+        }
     }
 });
 Signals.addSignalMethods(ViewSelector.prototype);
