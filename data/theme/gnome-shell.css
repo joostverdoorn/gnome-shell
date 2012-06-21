@@ -828,7 +828,6 @@ StScrollBar StButton#vhandle:hover
 
 .show-apps:checked .show-apps-icon {
     color: white;
-    /*icon-shadow: black 0px 2px 2px;*/
     transition-duration: 100;
 }
 
@@ -883,6 +882,7 @@ StScrollBar StButton#vhandle:hover
 .contact:focus,
 .app-well-app:focus > .overview-icon,
 .search-result-content:focus > .overview-icon,
+.show-apps:focus > .overview-icon,
 .contact:selected,
 .app-well-app:selected > .overview-icon,
 .search-result-content:selected > .overview-icon {

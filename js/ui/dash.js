@@ -237,7 +237,8 @@ const ShowAppsIcon = new Lang.Class({
         this._isHovered = false;
 
         this._button = new St.Button({ style_class: 'show-apps',
-                                        track_hover: true });
+                                        track_hover: true,
+                                        can_focus: true });
         this._iconActor = null;
         this.icon = new IconGrid.BaseIcon(_("Show Apps"),
                                            { setSizeManually: true,
