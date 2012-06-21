@@ -322,6 +322,15 @@ const Overview = new Lang.Class({
         this.emit('swipe-scroll-begin');
     },
 
+    _onStageKeyPress: function(actor, event) {
+        let symbol = event.get_key_symbol();
+
+        if (symbol == Clutter.Escape && !this._searchEntry.active) {
+            this.hide();
+            return true;
+        }
+    },
+
     _onCapturedEvent: function(actor, event) {
         let stageX, stageY;
         let threshold = Gtk.Settings.get_default().gtk_dnd_drag_threshold;
@@ -552,6 +561,9 @@ const Overview = new Lang.Class({
 
         this._buttonPressId = this._group.connect('button-press-event',
             Lang.bind(this, this._onButtonPress));
+
+        this._stageKeyPressId = global.stage.connect('key-press-event',
+                                                    Lang.bind(this, this._onStageKeyPress));
     },
 
     _animateVisible: function() {
@@ -632,6 +644,10 @@ const Overview = new Lang.Class({
         if (this._buttonPressId > 0)
             this._group.disconnect(this._buttonPressId);
         this._buttonPressId = 0;
+
+        if (this._stageKeyPressId > 0)
+            global.stage.disconnect(this._stageKeyPressId);
+        this._stageKeyPressId = 0;
     },
 
     // hideTemporarily:
