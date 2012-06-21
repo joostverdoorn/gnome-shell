@@ -826,7 +826,8 @@ StScrollBar StButton#vhandle:hover
     transition-duration: 100;
 }
 
-.show-apps:checked .show-apps-icon {
+.show-apps:checked .show-apps-icon,
+.show-apps:focus .show-apps-icon {
     color: white;
     transition-duration: 100;
 }
