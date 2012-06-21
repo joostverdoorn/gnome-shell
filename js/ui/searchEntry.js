@@ -173,7 +173,8 @@ const SearchEntry = new Lang.Class({
             }
 
             if (symbol == Clutter.Tab) {
-                this._searchResults.navigateFocus(Gtk.DirectionType.TAB_FORWARD);
+                //this._searchResults.navigateFocus(Gtk.DirectionType.TAB_FORWARD);
+                Main.overview.viewSelector.focusActivePage();
                 return true;
             } else if (symbol == Clutter.ISO_Left_Tab) {
                 this._focusTrap.can_focus = false;

@@ -180,6 +180,10 @@ const ViewSelector = new Lang.Class({
         this._searchResults.destroyProviderMeta(provider);
     },
 
+    focusActivePage: function() {
+        this._activePage.child.navigate_focus(null, Gtk.DirectionType.TAB_FORWARD, false);
+    },
+
     _showPage: function(page) {
         if(page == this._activePage)
             return;
