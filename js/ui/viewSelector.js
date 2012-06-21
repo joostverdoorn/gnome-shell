@@ -206,7 +206,7 @@ const ViewSelector = new Lang.Class({
                          });
     },
 
-    toggleAppsPage: function(doShow) {
+    showAppsPage: function(doShow) {
         if(doShow || (doShow == undefined && this._activePage != this._appsPage)) {
             this._showPage(this._appsPage);
         } else if(this._prevPage) {

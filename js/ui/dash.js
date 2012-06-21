@@ -238,7 +238,8 @@ const ShowAppsIcon = new Lang.Class({
 
         this._button = new St.Button({ style_class: 'show-apps',
                                         track_hover: true,
-                                        can_focus: true });
+                                        can_focus: true,
+                                        toggle_mode: true });
         this._iconActor = null;
         this.icon = new IconGrid.BaseIcon(_("Show Apps"),
                                            { setSizeManually: true,
@@ -249,15 +250,14 @@ const ShowAppsIcon = new Lang.Class({
 
         this.setChild(this._button);
 
-        this._button.connect('clicked',
+        this._button.connect('notify::checked',
                               Lang.bind(this, function() {
-                                  this._toggleAppsPage(!this._button.get_checked());
+                                  this._onButtonChecked();
                               }));
 
         Main.overview.connect('hidden',
                               Lang.bind(this, function() {
-                                  this._toggleAppsPage(false);
-                                  this._button.remove_style_pseudo_class('selected');
+                                  this._button.set_checked(false);
                               }));
     },
 
@@ -296,9 +296,8 @@ const ShowAppsIcon = new Lang.Class({
         return true;
     },
 
-    _toggleAppsPage: function(doShow) {
-        this._button.set_checked(doShow);
-        Main.overview.viewSelector.toggleAppsPage(doShow);
+    _onButtonChecked: function() {
+        Main.overview.viewSelector.showAppsPage(this._button.get_checked());
     }
 });
 
