@@ -195,33 +195,14 @@ const SearchEntry = new Lang.Class({
         let modifiers = event.get_state();
         let symbol = event.get_key_symbol();
 
-        if (symbol == Clutter.Escape) {
-            if (this.active)
-                this.reset();
-            else
-                Main.overview.hide();
+        if (symbol == Clutter.Escape && this.active) {
+            this.reset();
             return true;
         } else if (Clutter.keysym_to_unicode(symbol) ||
                    (symbol == Clutter.BackSpace && this.active)) {
-            this._startSearch(event);
-        } else if (!this.active) {
-            if (modifiers & Clutter.ModifierType.CONTROL_MASK) {
-                if (symbol == Clutter.Page_Up) {
-                    this._prevTab();
-                    return true;
-                } else if (symbol == Clutter.Page_Down) {
-                    this._nextTab();
-                    return true;
-                }
-            } else if (symbol == Clutter.Tab) {
-                this._activeTab.page.navigate_focus(null, Gtk.DirectionType.TAB_FORWARD, false);
-                return true;
-            } else if (symbol == Clutter.ISO_Left_Tab) {
-                this._activeTab.page.navigate_focus(null, Gtk.DirectionType.TAB_BACKWARD, false);
-                return true;
-            }
+            this._startSearch(event);        
+            return false;
         }
-        return false;
     },
 
     _onCapturedEvent: function(actor, event) {
