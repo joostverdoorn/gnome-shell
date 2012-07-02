@@ -408,7 +408,7 @@ const ViewSelector = new Lang.Class({
     },
 
     _showPage: function(page) {
-        if(page == this._activePage)
+        if(page == this._activePage && this._prevPage != null)
             return;
 
         if(this._activePage) {
