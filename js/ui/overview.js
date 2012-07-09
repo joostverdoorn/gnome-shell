@@ -17,7 +17,6 @@ const MessageTray = imports.ui.messageTray;
 const Panel = imports.ui.panel;
 const Params = imports.misc.params;
 const RemoteSearch = imports.ui.remoteSearch;
-const SearchEntry = imports.ui.searchEntry;
 const Tweener = imports.ui.tweener;
 const ViewSelector = imports.ui.viewSelector;
 const WorkspaceThumbnail = imports.ui.workspaceThumbnail;
@@ -186,11 +185,11 @@ const Overview = new Lang.Class({
 
         this._shellInfo = new ShellInfo();
 
-        this._searchEntry = new SearchEntry.SearchEntry();
-        this._group.add_actor(this._searchEntry.actor);
-
         this.viewSelector = new ViewSelector.ViewSelector();
         this._group.add_actor(this.viewSelector.actor);
+
+        this._entryActor = this.viewSelector.entryActor;
+        this._group.add_actor(this._entryActor);
 
         // Load remote search providers provided by applications
         RemoteSearch.loadRemoteSearchProviders(Lang.bind(this, this.addSearchProvider));
@@ -325,7 +324,7 @@ const Overview = new Lang.Class({
     _onStageKeyPress: function(actor, event) {
         let symbol = event.get_key_symbol();
 
-        if (symbol == Clutter.Escape && !this._searchEntry.active) {
+        if (symbol == Clutter.Escape && !this.viewSelector.searchActive()) {
             this.hide();
             return true;
         }
@@ -492,10 +491,10 @@ const Overview = new Lang.Class({
         this._coverPane.set_position(0, contentY);
         this._coverPane.set_size(primary.width, contentHeight);
 
-        let searchWidth = this._searchEntry.actor.get_width();
-        let searchHeight = this._searchEntry.actor.get_height();
+        let searchWidth = this._entryActor.get_width();
+        let searchHeight = this._entryActor.get_height();
         let searchX = (primary.width - searchWidth) / 2;
-        let searchY = contentY + this._spacing;       
+        let searchY = contentY + this._spacing;
 
         let dashWidth = Math.round(DASH_SPLIT_FRACTION * primary.width);
         let dashY = searchY + searchHeight + this._spacing;
@@ -508,14 +507,14 @@ const Overview = new Lang.Class({
         }
 
         let viewX = rtl ? 0 : dashWidth + this._spacing;
-        let viewY = dashY;
+        let viewY = searchY + searchHeight + this._spacing;
         let viewWidth = primary.width - dashWidth - this._spacing;
-        let viewHeight = contentHeight - this._spacing - viewY; 
+        let viewHeight = contentHeight - this._spacing - viewY;
 
-        this._searchEntry.actor.set_position(searchX, searchY);
+        this._entryActor.set_position(searchX, searchY);
         this._dash.actor.set_position(dashX, dashY);
         this.viewSelector.actor.set_position(viewX, viewY);
-        this.viewSelector.actor.set_size(viewWidth, viewHeight);  
+        this.viewSelector.actor.set_size(viewWidth, viewHeight);
     },
 
     //// Public methods ////
