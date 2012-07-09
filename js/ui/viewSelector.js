@@ -96,7 +96,9 @@ const SearchEntry = new Lang.Class({
 
         this._text.set_cursor_visible(true);
         this._text.set_selection(0, 0);
-        Main.overview.viewSelector.resetSearch();
+
+
+        this.emit('reset');
     },
 
     _startSearch: function(event) {
@@ -208,7 +210,7 @@ const SearchEntry = new Lang.Class({
             return true;
         } else if (Clutter.keysym_to_unicode(symbol) ||
                    (symbol == Clutter.BackSpace && this.active)) {
-            this._startSearch(event);        
+            this._startSearch(event);
             return false;
         }
     },
@@ -236,6 +238,7 @@ const SearchEntry = new Lang.Class({
         return false;
     }
 });
+Signals.addSignalMethods(SearchEntry.prototype);
 
 const ViewSelector = new Lang.Class({
     Name: 'ViewSelector',
@@ -251,6 +254,7 @@ const ViewSelector = new Lang.Class({
                                          y_fill: true,
                                          expand: true });
         this._activePage;
+        this._appsPageActive;
 
         this._workspacesDisplay = new WorkspacesView.WorkspacesDisplay();
         this._workspacesPage = new St.Bin({ child: this._workspacesDisplay.actor,
@@ -258,7 +262,7 @@ const ViewSelector = new Lang.Class({
                                  y_align: St.Align.START,
                                  x_fill: true,
                                  y_fill: true,
-                                 style_class: 'view-tab-page' });        
+                                 style_class: 'view-tab-page' });
         this._pageArea.add_actor(this._workspacesPage);
 
         this._appDisplay = new AppDisplay.AllAppDisplay();
@@ -289,6 +293,14 @@ const ViewSelector = new Lang.Class({
 
         this._searchEntry = new SearchEntry();
         this.entryActor = this._searchEntry.actor;
+        this._searchEntry.connect('reset', Lang.bind(this, 
+            function() {
+                if(this._appsPageActive) {
+                    this._showPage(this._appsPage);
+                } else {
+                    this._showPage(this._workspacesPage);
+                }
+            }));
 
         this._desktopFade = new St.Bin();
         global.overlay_group.add_actor(this._desktopFade);
@@ -312,7 +324,6 @@ const ViewSelector = new Lang.Class({
             function() {
                 this.hideDone();
             }));
-                
 
         // Public constraints which may be used to tie actors' height or
         // vertical position to the current tab's content; as the content's
@@ -328,11 +339,12 @@ const ViewSelector = new Lang.Class({
 
     show: function() {
         this._activePage = this._workspacesPage;
-        this._prevPage = null;
+        //this._prevPage = null;
 
-        this._workspacesDisplay.show();
+
         this._appsPage.hide();
-        this._searchPage.hide();        
+        this._searchPage.hide();
+        this._workspacesDisplay.show();
 
         this._showPage(this._workspacesPage);
 
@@ -352,7 +364,6 @@ const ViewSelector = new Lang.Class({
 
     showDone: function() {
         this._desktopFade.hide();
-        
     },
 
     hide: function() {
@@ -367,7 +378,7 @@ const ViewSelector = new Lang.Class({
                                transition: 'easeOutQuad' });
         }
 
-        this._workspacesDisplay.zoomFromOverview();        
+        this._workspacesDisplay.zoomFromOverview();
     },
 
     hideDone: function() {
@@ -419,7 +430,6 @@ const ViewSelector = new Lang.Class({
                                onComplete: Lang.bind(this,
                                    function() {
                                        this._activePage.hide_all();
-                                       this._prevPage = this._activePage;
                                        this._activePage = page;
                                    })
                              });
@@ -429,15 +439,33 @@ const ViewSelector = new Lang.Class({
         Tweener.addTween(page,
                          { opacity: 255,
                            time: 0.1,
-                           transition: 'easeOutQuad'
+                           transition: 'easeOutQuad',
+                           onComplete: Lang.bind(this,
+                               function() {
+                                   if(page == this._appsPage) {
+                                       this._appsPageActive = true;
+                                   } else if(page == this._workspacesPage) {
+                                       this._appsPageActive = false;
+                                   }
+                               })
                          });
     },
 
     showAppsPage: function(doShow) {
-        if(doShow || (doShow == undefined && this._activePage != this._appsPage)) {
-            this._showPage(this._appsPage);
-        } else if(this._prevPage) {
-            this._showPage(this._prevPage);
+        if(doShow) {
+            if(this._activePage == this._searchPage) {
+                this._appsPageActive = true;
+                this._searchEntry.reset();
+            } else {
+                this._showPage(this._appsPage);
+            }
+        } else {
+            if(this._activePage == this._searchPage) {
+                this._appsPageActive = false;
+                this._searchEntry.reset();
+            } else {
+                this._showPage(this._workspacesPage);
+            }
         }
     },
 
@@ -447,9 +475,8 @@ const ViewSelector = new Lang.Class({
     },
 
     resetSearch: function() {
-        if(this._prevPage && this._prevPage != this._searchPage) {
-            this._showPage(this._prevPage);
-        }
+        
+        this._searchEntry.reset();
     }
 });
 Signals.addSignalMethods(ViewSelector.prototype);
