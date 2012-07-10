@@ -33,6 +33,7 @@ const WindowAttentionHandler = imports.ui.windowAttentionHandler;
 const Scripting = imports.ui.scripting;
 const SessionMode = imports.ui.sessionMode;
 const ShellDBus = imports.ui.shellDBus;
+const ShellMountOperation = imports.ui.shellMountOperation;
 const TelepathyClient = imports.ui.telepathyClient;
 const WindowManager = imports.ui.windowManager;
 const Magnifier = imports.ui.magnifier;
@@ -60,6 +61,7 @@ let ctrlAltTabManager = null;
 let recorder = null;
 let sessionMode = null;
 let shellDBusService = null;
+let shellMountOpDBusService = null;
 let modalCount = 0;
 let modalActorFocusStack = [];
 let uiGroup = null;
@@ -150,6 +152,7 @@ function start() {
 
     sessionMode = new SessionMode.SessionMode();
     shellDBusService = new ShellDBus.GnomeShell();
+    shellMountOpDBusService = new ShellMountOperation.GnomeShellMountOpHandler();
 
     // Ensure ShellWindowTracker and ShellAppUsage are initialized; this will
     // also initialize ShellAppSystem first.  ShellAppSystem
@@ -608,13 +611,13 @@ function _globalKeyPressHandler(actor, event) {
             if (!sessionMode.hasWorkspaces)
                 return false;
 
-            wm.actionMoveWorkspaceUp();
+            wm.actionMoveWorkspace(Meta.MotionDirection.UP);
             return true;
         case Meta.KeyBindingAction.WORKSPACE_DOWN:
             if (!sessionMode.hasWorkspaces)
                 return false;
 
-            wm.actionMoveWorkspaceDown();
+            wm.actionMoveWorkspace(Meta.MotionDirection.DOWN);
             return true;
         case Meta.KeyBindingAction.PANEL_RUN_DIALOG:
         case Meta.KeyBindingAction.COMMAND_2:
@@ -671,6 +674,7 @@ function pushModal(actor, timestamp, options) {
             log('pushModal: invocation of begin_modal failed');
             return false;
         }
+        Meta.disable_unredirect_for_screen(global.screen);
     }
 
     global.set_stage_input_mode(Shell.StageInputMode.FULLSCREEN);
@@ -751,6 +755,7 @@ function popModal(actor, timestamp) {
 
     global.end_modal(timestamp);
     global.set_stage_input_mode(Shell.StageInputMode.NORMAL);
+    Meta.enable_unredirect_for_screen(global.screen);
 }
 
 function createLookingGlass() {

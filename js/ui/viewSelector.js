@@ -10,7 +10,7 @@ const Shell = imports.gi.Shell;
 const St = imports.gi.St;
 
 const AppDisplay = imports.ui.appDisplay;
-const ContactDisplay = imports.ui.contactDisplay;
+//const ContactDisplay = imports.ui.contactDisplay;
 const Main = imports.ui.main;
 const PlaceDisplay = imports.ui.placeDisplay;
 const Search = imports.ui.search;
@@ -214,7 +214,6 @@ const ViewSelector = new Lang.Class({
         this.addSearchProvider(new AppDisplay.AppSearchProvider());
         this.addSearchProvider(new AppDisplay.SettingsSearchProvider());
         this.addSearchProvider(new PlaceDisplay.PlaceSearchProvider());
-        this.addSearchProvider(new ContactDisplay.ContactSearchProvider());
 
         this._searchEntry = new SearchEntry();
         this._searchEntry.connect('reset', Lang.bind(this, 

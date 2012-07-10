@@ -9,6 +9,13 @@ const Shell = imports.gi.Shell;
 const Main = imports.ui.main;
 const Tweener = imports.ui.tweener;
 
+const PopupAnimation = {
+    NONE:  0,
+    SLIDE: 1 << 0,
+    FADE:  1 << 1,
+    FULL:  ~0,
+};
+
 const POPUP_ANIMATION_TIME = 0.15;
 
 /**
@@ -18,7 +25,10 @@ const POPUP_ANIMATION_TIME = 0.15;
  *
  * An actor which displays a triangle "arrow" pointing to a given
  * side.  The .bin property is a container in which content can be
- * placed.  The arrow position may be controlled via setArrowOrigin().
+ * placed.  The arrow position may be controlled via
+ * setArrowOrigin(). The arrow side might be temporarily flipped
+ * depending on the box size and source position to keep the box
+ * totally inside the monitor if possible.
  *
  */
 const BoxPointer = new Lang.Class({
@@ -26,6 +36,7 @@ const BoxPointer = new Lang.Class({
 
     _init: function(arrowSide, binProperties) {
         this._arrowSide = arrowSide;
+        this._userArrowSide = arrowSide;
         this._arrowOrigin = 0;
         this.actor = new St.Bin({ x_fill: true,
                                   y_fill: true });
@@ -65,11 +76,16 @@ const BoxPointer = new Lang.Class({
     show: function(animate, onComplete) {
         let themeNode = this.actor.get_theme_node();
         let rise = themeNode.get_length('-arrow-rise');
+        let animationTime = (animate & PopupAnimation.FULL) ? POPUP_ANIMATION_TIME : 0;
 
-        this.opacity = 0;
+        if (animate & PopupAnimation.FADE)
+            this.opacity = 0;
+        else
+            this.opacity = 255;
+
         this.actor.show();
 
-        if (animate) {
+        if (animate & PopupAnimation.SLIDE) {
             switch (this._arrowSide) {
                 case St.Side.TOP:
                     this.yOffset = -rise;
@@ -95,7 +111,7 @@ const BoxPointer = new Lang.Class({
                                      if (onComplete)
                                          onComplete();
                                  }),
-                                 time: POPUP_ANIMATION_TIME });
+                                 time: animationTime });
     },
 
     hide: function(animate, onComplete) {
@@ -103,8 +119,10 @@ const BoxPointer = new Lang.Class({
         let yOffset = 0;
         let themeNode = this.actor.get_theme_node();
         let rise = themeNode.get_length('-arrow-rise');
+        let fade = (animate & PopupAnimation.FADE);
+        let animationTime = (animate & PopupAnimation.FULL) ? POPUP_ANIMATION_TIME : 0;
 
-        if (animate) {
+        if (animate & PopupAnimation.SLIDE) {
             switch (this._arrowSide) {
                 case St.Side.TOP:
                     yOffset = rise;
@@ -123,13 +141,14 @@ const BoxPointer = new Lang.Class({
 
         this._muteInput();
 
-        Tweener.addTween(this, { opacity: 0,
+        Tweener.addTween(this, { opacity: fade ? 0 : 255,
                                  xOffset: xOffset,
                                  yOffset: yOffset,
                                  transition: 'linear',
-                                 time: POPUP_ANIMATION_TIME,
+                                 time: animationTime,
                                  onComplete: Lang.bind(this, function () {
                                      this.actor.hide();
+                                     this.opacity = 0;
                                      this.xOffset = 0;
                                      this.yOffset = 0;
                                      if (onComplete)
@@ -199,8 +218,27 @@ const BoxPointer = new Lang.Class({
         }
         this.bin.allocate(childBox, flags);
 
-        if (this._sourceActor && this._sourceActor.mapped)
+        if (this._sourceActor && this._sourceActor.mapped) {
             this._reposition(this._sourceActor, this._arrowAlignment);
+
+            if (this._shouldFlip()) {
+                switch (this._arrowSide) {
+                case St.Side.TOP:
+                    this._arrowSide = St.Side.BOTTOM;
+                    break;
+                case St.Side.BOTTOM:
+                    this._arrowSide = St.Side.TOP;
+                    break;
+                case St.Side.LEFT:
+                    this._arrowSide = St.Side.RIGHT;
+                    break;
+                case St.Side.RIGHT:
+                    this._arrowSide = St.Side.LEFT;
+                    break;
+                }
+                this._reposition(this._sourceActor, this._arrowAlignment);
+            }
+        }
     },
 
     _drawBorder: function(area) {
@@ -327,6 +365,8 @@ const BoxPointer = new Lang.Class({
     },
 
     setPosition: function(sourceActor, alignment) {
+        this._arrowSide = this._userArrowSide;
+
         // We need to show it now to force an allocation,
         // so that we can query the correct size.
         this.actor.show();
@@ -343,11 +383,7 @@ const BoxPointer = new Lang.Class({
         if (!this._sourceActor)
             return;
 
-        // We need to show it now to force an allocation,
-        // so that we can query the correct size.
-        this.actor.show();
-
-        this._reposition(this._sourceActor, this._arrowAlignment);
+        this.setPosition(this._sourceActor, this._arrowAlignment);
     },
 
     _reposition: function(sourceActor, alignment) {
@@ -444,6 +480,39 @@ const BoxPointer = new Lang.Class({
         // x == y == 0.
         this.actor.set_anchor_point(-(this._xPosition + this._xOffset),
                                     -(this._yPosition + this._yOffset));
+    },
+
+    _shouldFlip: function() {
+        let sourceAllocation = Shell.util_get_transformed_allocation(this._sourceActor);
+        let boxAllocation = Shell.util_get_transformed_allocation(this.actor);
+        let boxWidth = boxAllocation.x2 - boxAllocation.x1;
+        let boxHeight = boxAllocation.y2 - boxAllocation.y1;
+        let monitor = Main.layoutManager.findMonitorForActor(this.actor);
+
+        switch (this._arrowSide) {
+        case St.Side.TOP:
+            if (boxAllocation.y2 > monitor.y + monitor.height &&
+                boxHeight < sourceAllocation.y1 - monitor.y)
+                return true;
+            break;
+        case St.Side.BOTTOM:
+            if (boxAllocation.y1 < monitor.y &&
+                boxHeight < monitor.y + monitor.height - sourceAllocation.y2)
+                return true;
+            break;
+        case St.Side.LEFT:
+            if (boxAllocation.x2 > monitor.x + monitor.width &&
+                boxWidth < sourceAllocation.x1 - monitor.x)
+                return true;
+            break;
+        case St.Side.RIGHT:
+            if (boxAllocation.x1 < monitor.x &&
+                boxWidth < monitor.x + monitor.width - sourceAllocation.x2)
+                return true;
+            break;
+        }
+
+        return false;
     },
 
     set xOffset(offset) {

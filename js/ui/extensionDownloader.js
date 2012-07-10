@@ -22,21 +22,34 @@ const REPOSITORY_URL_INFO =     REPOSITORY_URL_BASE + '/extension-info/';
 
 let _httpSession;
 
-function installExtensionFromUUID(uuid) {
+function installExtension(uuid, invocation) {
     let params = { uuid: uuid,
                    shell_version: Config.PACKAGE_VERSION };
 
     let message = Soup.form_request_new_from_hash('GET', REPOSITORY_URL_INFO, params);
 
-    _httpSession.queue_message(message,
-                               function(session, message) {
-                                   let info = JSON.parse(message.response_body.data);
-                                   let dialog = new InstallExtensionDialog(uuid, info);
-                                   dialog.open(global.get_current_time());
-                               });
+    _httpSession.queue_message(message, function(session, message) {
+        if (message.status_code != Soup.KnownStatusCode.OK) {
+            ExtensionSystem.logExtensionError(uuid, 'downloading info: ' + message.status_code);
+            invocation.return_dbus_error('org.gnome.Shell.DownloadInfoError', message.status_code.toString());
+            return;
+        }
+
+        let info;
+        try {
+            info = JSON.parse(message.response_body.data);
+        } catch (e) {
+            ExtensionSystem.logExtensionError(uuid, 'parsing info: ' + e);
+            invocation.return_dbus_error('org.gnome.Shell.ParseInfoError', e.toString());
+            return;
+        }
+
+        let dialog = new InstallExtensionDialog(uuid, info, invocation);
+        dialog.open(global.get_current_time());
+    });
 }
 
-function uninstallExtensionFromUUID(uuid) {
+function uninstallExtension(uuid) {
     let extension = ExtensionUtils.extensions[uuid];
     if (!extension)
         return false;
@@ -52,9 +65,9 @@ function uninstallExtensionFromUUID(uuid) {
     return true;
 }
 
-function gotExtensionZipFile(session, message, uuid) {
+function gotExtensionZipFile(session, message, uuid, callback, errback) {
     if (message.status_code != Soup.KnownStatusCode.OK) {
-        logExtensionError(uuid, 'downloading extension: ' + message.status_code);
+        errback('DownloadExtensionError', message.status_code);
         return;
     }
 
@@ -63,7 +76,8 @@ function gotExtensionZipFile(session, message, uuid) {
         if (!dir.query_exists(null))
             dir.make_directory_with_parents(null);
     } catch (e) {
-        logExtensionError('Could not create extension directory');
+        errback('CreateExtensionDirectoryError', e);
+        return;
     }
 
     let [file, stream] = Gio.File.new_tmp('XXXXXX.shell-extension.zip');
@@ -77,12 +91,17 @@ function gotExtensionZipFile(session, message, uuid) {
                                           null);
 
     if (!success) {
-        logExtensionError(uuid, 'extract: could not extract');
+        errback('ExtractExtensionError');
         return;
     }
 
     GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, function(pid, status) {
         GLib.spawn_close_pid(pid);
+
+        if (status != 0) {
+            errback('ExtractExtensionError');
+            return;
+        }
 
         // Add extension to 'enabled-extensions' for the user, always...
         let enabledExtensions = global.settings.get_strv(ExtensionSystem.ENABLED_EXTENSIONS_KEY);
@@ -91,7 +110,17 @@ function gotExtensionZipFile(session, message, uuid) {
             global.settings.set_strv(ExtensionSystem.ENABLED_EXTENSIONS_KEY, enabledExtensions);
         }
 
-        ExtensionSystem.loadExtension(dir, ExtensionUtils.ExtensionType.PER_USER, true);
+        let extension = ExtensionUtils.createExtensionObject(uuid, dir, ExtensionUtils.ExtensionType.PER_USER);
+
+        try {
+            ExtensionSystem.loadExtension(extension);
+        } catch(e) {
+            uninstallExtension(uuid);
+            errback('LoadExtensionError', e);
+            return;
+        }
+
+        callback();
     });
 }
 
@@ -99,11 +128,12 @@ const InstallExtensionDialog = new Lang.Class({
     Name: 'InstallExtensionDialog',
     Extends: ModalDialog.ModalDialog,
 
-    _init: function(uuid, info) {
+    _init: function(uuid, info, invocation) {
         this.parent({ styleClass: 'extension-dialog' });
 
         this._uuid = uuid;
         this._info = info;
+        this._invocation = invocation;
 
         this.setButtons([{ label: _("Cancel"),
                            action: Lang.bind(this, this._onCancelButtonPressed),
@@ -128,34 +158,27 @@ const InstallExtensionDialog = new Lang.Class({
 
     _onCancelButtonPressed: function(button, event) {
         this.close(global.get_current_time());
-
-        // Even though the extension is already "uninstalled", send through
-        // a state-changed signal for any users who want to know if the install
-        // went through correctly -- using proper async DBus would block more
-        // traditional clients like the plugin
-        let meta = { uuid: this._uuid,
-                     state: ExtensionSystem.ExtensionState.UNINSTALLED,
-                     error: '' };
-
-        _signals.emit('extension-state-changed', meta);
+        this._invocation.return_value(GLib.Variant.new('(s)', ['cancelled']));
     },
 
     _onInstallButtonPressed: function(button, event) {
-        let state = { uuid: this._uuid,
-                      state: ExtensionSystem.ExtensionState.DOWNLOADING,
-                      error: '' };
-
-        _signals.emit('extension-state-changed', state);
-
         let params = { shell_version: Config.PACKAGE_VERSION };
 
         let url = REPOSITORY_URL_DOWNLOAD.format(this._uuid);
         let message = Soup.form_request_new_from_hash('GET', url, params);
 
-        _httpSession.queue_message(message,
-                                   Lang.bind(this, function(session, message) {
-                                       gotExtensionZipFile(session, message, this._uuid);
-                                   }));
+        let invocation = this._invocation;
+        function errback(code, message) {
+            invocation.return_dbus_error('org.gnome.Shell.' + code, message ? message.toString() : '');
+        }
+
+        function callback() {
+            invocation.return_value(GLib.Variant.new('(s)', 'successful'));
+        }
+
+        _httpSession.queue_message(message, Lang.bind(this, function(session, message) {
+            gotExtensionZipFile(session, message, this._uuid, callback, errback);
+        }));
 
         this.close(global.get_current_time());
     }

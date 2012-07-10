@@ -299,7 +299,7 @@ get_app_for_window (ShellWindowTracker    *tracker,
   result = shell_app_system_lookup_wmclass (app_system,
                                             meta_window_get_wm_class (window));
   if (result != NULL)
-    return result;
+    return g_object_ref (result);
 
   result = get_app_from_window_pid (tracker, window);
   if (result != NULL)
@@ -357,7 +357,10 @@ update_focus_app (ShellWindowTracker *self)
   new_focus_app = new_focus_win ? shell_window_tracker_get_window_app (self, new_focus_win) : NULL;
 
   if (new_focus_app)
-    shell_app_update_window_actions (new_focus_app, new_focus_win);
+    {
+      shell_app_update_window_actions (new_focus_app, new_focus_win);
+      shell_app_update_app_menu (new_focus_app, new_focus_win);
+    }
 
   set_focus_app (self, new_focus_app);
 }

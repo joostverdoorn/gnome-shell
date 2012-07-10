@@ -10,6 +10,9 @@ const Shell = imports.gi.Shell;
 const Main = imports.ui.main;
 const ShellMountOperation = imports.ui.shellMountOperation;
 const ScreenSaver = imports.misc.screenSaver;
+const GnomeSession = imports.misc.gnomeSession;
+
+const GNOME_SESSION_AUTOMOUNT_INHIBIT = 16;
 
 // GSettings keys
 const SETTINGS_SCHEMA = 'org.gnome.desktop.media-handling';
@@ -79,6 +82,12 @@ const AutomountManager = new Lang.Class({
     _init: function() {
         this._settings = new Gio.Settings({ schema: SETTINGS_SCHEMA });
         this._volumeQueue = [];
+        this._session = new GnomeSession.SessionManager();
+        this._session.connectSignal('InhibitorAdded',
+                                    Lang.bind(this, this._InhibitorsChanged));
+        this._session.connectSignal('InhibitorRemoved',
+                                    Lang.bind(this, this._InhibitorsChanged));
+        this._inhibited = false;
 
         if (!haveSystemd())
             this.ckListener = new ConsoleKitManager();
@@ -108,6 +117,16 @@ const AutomountManager = new Lang.Class({
         Mainloop.idle_add(Lang.bind(this, this._startupMountAll));
     },
 
+    _InhibitorsChanged: function(object, senderName, [inhibtor]) {
+        this._session.IsInhibitedRemote(GNOME_SESSION_AUTOMOUNT_INHIBIT,
+            Lang.bind(this,
+                function(result, error) {
+                    if (!error) {
+                        this._inhibited = result[0];
+                    }
+                }));
+    },
+
     _screenSaverActiveChanged: function(object, senderName, [isActive]) {
         if (!isActive) {
             this._volumeQueue.forEach(Lang.bind(this, function(volume) {
@@ -123,7 +142,8 @@ const AutomountManager = new Lang.Class({
         let volumes = this._volumeMonitor.get_volumes();
         volumes.forEach(Lang.bind(this, function(volume) {
             this._checkAndMountVolume(volume, { checkSession: false,
-                                                useMountOp: false });
+                                                useMountOp: false,
+                                                allowAutorun: false });
         }));
 
         return false;
@@ -201,7 +221,8 @@ const AutomountManager = new Lang.Class({
 
     _checkAndMountVolume: function(volume, params) {
         params = Params.parse(params, { checkSession: true,
-                                        useMountOp: true });
+                                        useMountOp: true,
+                                        allowAutorun: true });
 
         if (params.checkSession) {
             // if we're not in the current ConsoleKit session,
@@ -216,6 +237,9 @@ const AutomountManager = new Lang.Class({
                 return;
             }
         }
+
+        if (this._inhibited)
+            return;
 
         // Volume is already mounted, don't bother.
         if (volume.get_mount())
@@ -236,15 +260,20 @@ const AutomountManager = new Lang.Class({
 
         if (params.useMountOp) {
             let operation = new ShellMountOperation.ShellMountOperation(volume);
-            this._mountVolume(volume, operation.mountOp);
+            this._mountVolume(volume, operation, params.allowAutorun);
         } else {
-            this._mountVolume(volume, null);
+            this._mountVolume(volume, null, params.allowAutorun);
         }
     },
 
-    _mountVolume: function(volume, operation) {
-        this._allowAutorun(volume);
-        volume.mount(0, operation, null,
+    _mountVolume: function(volume, operation, allowAutorun) {
+        if (allowAutorun)
+            this._allowAutorun(volume);
+
+        let mountOp = operation ? operation.mountOp : null;
+        volume._operation = operation;
+
+        volume.mount(0, mountOp, null,
                      Lang.bind(this, this._onVolumeMounted));
     },
 
@@ -253,15 +282,19 @@ const AutomountManager = new Lang.Class({
 
         try {
             volume.mount_finish(res);
+            this._closeOperation(volume);
         } catch (e) {
-            let string = e.toString();
-
-            // FIXME: needs proper error code handling instead of this
-            // See https://bugzilla.gnome.org/show_bug.cgi?id=591480
-            if (string.indexOf('No key available with this passphrase') != -1)
+            // FIXME: we will always get G_IO_ERROR_FAILED from the gvfs udisks
+            // backend in this case, see 
+            // https://bugs.freedesktop.org/show_bug.cgi?id=51271
+            if (e.message.indexOf('No key available with this passphrase') != -1) {
                 this._reaskPassword(volume);
-            else
-                log('Unable to mount volume ' + volume.get_name() + ': ' + string);
+            } else {
+                if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.FAILED_HANDLED))
+                    log('Unable to mount volume ' + volume.get_name() + ': ' + e.toString());
+
+                this._closeOperation(volume);
+            }
         }
     },
 
@@ -273,8 +306,16 @@ const AutomountManager = new Lang.Class({
     },
 
     _reaskPassword: function(volume) {
-        let operation = new ShellMountOperation.ShellMountOperation(volume, { reaskPassword: true });
-        this._mountVolume(volume, operation.mountOp);        
+        let existingDialog = volume._operation ? volume._operation.borrowDialog() : null;
+        let operation = 
+            new ShellMountOperation.ShellMountOperation(volume,
+                                                        { existingDialog: existingDialog });
+        this._mountVolume(volume, operation);
+    },
+
+    _closeOperation: function(volume) {
+        if (volume._operation)
+            volume._operation.close();
     },
 
     _allowAutorun: function(volume) {

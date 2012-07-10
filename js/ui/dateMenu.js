@@ -2,6 +2,7 @@
 
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
+const GnomeDesktop = imports.gi.GnomeDesktop;
 const Lang = imports.lang;
 const Mainloop = imports.mainloop;
 const Cairo = imports.cairo;
@@ -16,14 +17,6 @@ const Main = imports.ui.main;
 const PanelMenu = imports.ui.panelMenu;
 const PopupMenu = imports.ui.popupMenu;
 const Calendar = imports.ui.calendar;
-const UPowerGlib = imports.gi.UPowerGlib;
-
-// in org.gnome.desktop.interface
-const CLOCK_FORMAT_KEY        = 'clock-format';
-
-// in org.gnome.shell.clock
-const CLOCK_SHOW_DATE_KEY     = 'show-date';
-const CLOCK_SHOW_SECONDS_KEY  = 'show-seconds';
 
 function _onVertSepRepaint (area)
 {
@@ -60,8 +53,8 @@ const DateMenuButton = new Lang.Class({
         // role ATK_ROLE_MENU like other elements of the panel.
         this.actor.accessible_role = Atk.Role.LABEL;
 
-        this._clock = new St.Label();
-        this.actor.add_actor(this._clock);
+        this._clockDisplay = new St.Label();
+        this.actor.add_actor(this._clockDisplay);
 
         hbox = new St.BoxLayout({name: 'calendarArea' });
         this.menu.addActor(hbox);
@@ -73,7 +66,7 @@ const DateMenuButton = new Lang.Class({
 
         // Date
         this._date = new St.Label();
-        this.actor.label_actor = this._clock;
+        this.actor.label_actor = this._clockDisplay;
         this._date.style_class = 'datemenu-date-label';
         vbox.add(this._date);
 
@@ -155,77 +148,29 @@ const DateMenuButton = new Lang.Class({
 
         // Done with hbox for calendar and event list
 
-        // Track changes to clock settings
-        this._desktopSettings = new Gio.Settings({ schema: 'org.gnome.desktop.interface' });
-        this._clockSettings = new Gio.Settings({ schema: 'org.gnome.shell.clock' });
-        this._desktopSettings.connect('changed', Lang.bind(this, this._updateClockAndDate));
-        this._clockSettings.connect('changed', Lang.bind(this, this._updateClockAndDate));
-
-        // https://bugzilla.gnome.org/show_bug.cgi?id=655129
-        this._upClient = new UPowerGlib.Client();
-        this._upClient.connect('notify-resume', Lang.bind(this, this._updateClockAndDate));
-
-        // Start the clock
+        this._clock = new GnomeDesktop.WallClock();
+        this._clock.connect('notify::clock', Lang.bind(this, this._updateClockAndDate));
         this._updateClockAndDate();
     },
 
     _updateClockAndDate: function() {
-        let format = this._desktopSettings.get_string(CLOCK_FORMAT_KEY);
-        let showDate = this._clockSettings.get_boolean(CLOCK_SHOW_DATE_KEY);
-        let showSeconds = this._clockSettings.get_boolean(CLOCK_SHOW_SECONDS_KEY);
-
-        let clockFormat;
-        let dateFormat;
-
-        switch (format) {
-            case '24h':
-                if (showDate)
-                    /* Translators: This is the time format with date used
-                       in 24-hour mode. */
-                    clockFormat = showSeconds ? _("%a %b %e, %R:%S")
-                                              : _("%a %b %e, %R");
-                else
-                    /* Translators: This is the time format without date used
-                       in 24-hour mode. */
-                    clockFormat = showSeconds ? _("%a %R:%S")
-                                              : _("%a %R");
-                break;
-            case '12h':
-            default:
-                if (showDate)
-                    /* Translators: This is a time format with date used
-                       for AM/PM. */
-                    clockFormat = showSeconds ? _("%a %b %e, %l:%M:%S %p")
-                                              : _("%a %b %e, %l:%M %p");
-                else
-                    /* Translators: This is a time format without date used
-                       for AM/PM. */
-                    clockFormat = showSeconds ? _("%a %l:%M:%S %p")
-                                              : _("%a %l:%M %p");
-                break;
-        }
-
-        let displayDate = new Date();
-
-        this._clock.set_text(displayDate.toLocaleFormat(clockFormat));
-
+        this._clockDisplay.set_text(this._clock.clock);
         /* Translators: This is the date format to use when the calendar popup is
          * shown - it is shown just below the time in the shell (e.g. "Tue 9:29 AM").
          */
-        dateFormat = _("%A %B %e, %Y");
+        let dateFormat = _("%A %B %e, %Y");
+        let displayDate = new Date();
         this._date.set_text(displayDate.toLocaleFormat(dateFormat));
-
-        Mainloop.timeout_add_seconds(1, Lang.bind(this, this._updateClockAndDate));
-        return false;
     },
 
     _onOpenCalendarActivate: function() {
         this.menu.close();
         let calendarSettings = new Gio.Settings({ schema: 'org.gnome.desktop.default-applications.office.calendar' });
         let tool = calendarSettings.get_string('exec');
-        if (tool.length == 0 || tool == 'evolution') {
+        if (tool.length == 0 || tool.substr(0, 9) == 'evolution') {
             // TODO: pass the selected day
-            Util.spawn(['evolution', '-c', 'calendar']);
+            let app = Shell.AppSystem.get_default().lookup_app('evolution-calendar.desktop');
+            app.activate();
         } else {
             let needTerm = calendarSettings.get_boolean('needs-term');
             if (needTerm) {

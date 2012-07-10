@@ -9,7 +9,6 @@ js/ui/appDisplay.js
 js/ui/appFavorites.js
 js/ui/autorunManager.js
 js/ui/calendar.js
-js/ui/contactDisplay.js
 js/ui/dash.js
 js/ui/dateMenu.js
 js/ui/endSessionDialog.js
@@ -42,6 +41,7 @@ js/ui/userMenu.js
 js/ui/viewSelector.js
 js/ui/wanda.js
 js/ui/windowAttentionHandler.js
+src/calendar-server/evolution-calendar.desktop.in.in
 src/gvc/gvc-mixer-control.c
 src/main.c
 src/shell-app.c

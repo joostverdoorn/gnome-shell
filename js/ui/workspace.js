@@ -1121,25 +1121,6 @@ const Workspace = new Lang.Class({
         }
     },
 
-    _showAllOverlays: function() {
-        let currentWorkspace = global.screen.get_active_workspace();
-        for (let i = 0; i < this._windows.length; i++) {
-            let clone = this._windows[i];
-            let overlay = this._windowOverlays[i];
-            this._showWindowOverlay(clone, overlay,
-                                    this.metaWorkspace == null || this.metaWorkspace == currentWorkspace);
-        }
-    },
-
-    _hideAllOverlays: function() {
-        for (let i = 0; i < this._windows.length; i++) {
-            let clone = this._windows[i];
-            let overlay = this._windowOverlays[i];
-            if (overlay)
-                overlay.hide();
-        }
-    },
-
     _delayedWindowRepositioning: function() {
         if (this._windowIsZooming)
             return true;
@@ -1339,6 +1320,10 @@ const Workspace = new Lang.Class({
         // Position and scale the windows.
         for (let i = 0; i < this._windows.length; i++) {
             let clone = this._windows[i];
+            let overlay = this._windowOverlays[i];
+
+            if (overlay)
+                overlay.hide();
 
             clone.zoomFromOverview();
 
@@ -1363,8 +1348,6 @@ const Workspace = new Lang.Class({
                                  });
             }
         }
-
-        this._hideAllOverlays();
     },
 
     destroy : function() {

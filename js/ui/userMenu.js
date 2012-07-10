@@ -133,7 +133,7 @@ const IMStatusChooserItem = new Lang.Class({
         item = new IMStatusItem(_("Busy"), 'user-busy');
         this._combo.addMenuItem(item, IMStatus.BUSY);
 
-        item = new IMStatusItem(_("Hidden"), 'user-invisible');
+        item = new IMStatusItem(_("Invisible"), 'user-invisible');
         this._combo.addMenuItem(item, IMStatus.HIDDEN);
 
         item = new IMStatusItem(_("Away"), 'user-away');
@@ -481,10 +481,8 @@ const UserMenuButton = new Lang.Class({
                                   Lang.bind(this, this._updatePresenceIcon));
         this._accountMgr.connect('account-enabled',
                                   Lang.bind(this, this._onAccountEnabled));
-        this._accountMgr.connect('account-disabled',
-                                 Lang.bind(this, this._onAccountDisabled));
         this._accountMgr.connect('account-removed',
-                                  Lang.bind(this, this._onAccountDisabled));
+                                  Lang.bind(this, this._onAccountRemoved));
         this._accountMgr.prepare_async(null, Lang.bind(this,
             function(mgr) {
                 let [presence, s, msg] = mgr.get_most_available_presence();
@@ -524,6 +522,10 @@ const UserMenuButton = new Lang.Class({
         this._updateSwitchUser();
         this._updateLogout();
         this._updateLockScreen();
+
+        this._updatesFile = Gio.File.new_for_path('/var/lib/PackageKit/prepared-update');
+        this._updatesMonitor = this._updatesFile.monitor(Gio.FileMonitorFlags.NONE, null);
+        this._updatesMonitor.connect('changed', Lang.bind(this, this._updateInstallUpdates));
 
         // Whether shutdown is available or not depends on both lockdown
         // settings (disable-log-out) and Polkit policy - the latter doesn't
@@ -580,11 +582,17 @@ const UserMenuButton = new Lang.Class({
         this._lockScreenItem.actor.visible = allowLockScreen;
     },
 
+    _updateInstallUpdates: function() {
+        let haveUpdates = this._updatesFile.query_exists(null);
+        this._installUpdatesItem.actor.visible = haveUpdates && this._haveShutdown;
+    },
+
     _updateHaveShutdown: function() {
         this._session.CanShutdownRemote(Lang.bind(this,
             function(result, error) {
                 if (!error) {
-                    this._haveShutdown = result;
+                    this._haveShutdown = result[0];
+                    this._updateInstallUpdates();
                     this._updateSuspendOrPowerOff();
                 }
             }));
@@ -645,7 +653,7 @@ const UserMenuButton = new Lang.Class({
         this._updateChangingPresence();
     },
 
-    _onAccountDisabled: function(accountMgr, account) {
+    _onAccountRemoved: function(accountMgr, account) {
         account.disconnect(account._changingId);
         account._changingId = 0;
         this._updateChangingPresence();
@@ -692,13 +700,6 @@ const UserMenuButton = new Lang.Class({
             this.menu.addMenuItem(item);
         }
 
-        item = new PopupMenu.PopupAlternatingMenuItem(_("Power Off"),
-                                                      _("Suspend"));
-        this.menu.addMenuItem(item);
-        item.connect('activate', Lang.bind(this, this._onSuspendOrPowerOffActivate));
-        this._suspendOrPowerOffItem = item;
-        this._updateSuspendOrPowerOff();
-
         item = new PopupMenu.PopupSeparatorMenuItem();
         this.menu.addMenuItem(item);
 
@@ -712,13 +713,25 @@ const UserMenuButton = new Lang.Class({
         this.menu.addMenuItem(item);
         this._logoutItem = item;
 
-        item = new PopupMenu.PopupSeparatorMenuItem();
-        this.menu.addMenuItem(item);
-
         item = new PopupMenu.PopupMenuItem(_("Lock"));
         item.connect('activate', Lang.bind(this, this._onLockScreenActivate));
         this.menu.addMenuItem(item);
         this._lockScreenItem = item;
+
+        item = new PopupMenu.PopupSeparatorMenuItem();
+        this.menu.addMenuItem(item);
+
+        item = new PopupMenu.PopupMenuItem(_("Install Updates & Restart"));
+        item.connect('activate', Lang.bind(this, this._onInstallUpdatesActivate));
+        this.menu.addMenuItem(item);
+        this._installUpdatesItem = item;
+
+        item = new PopupMenu.PopupAlternatingMenuItem(_("Power Off"),
+                                                      _("Suspend"));
+        this.menu.addMenuItem(item);
+        item.connect('activate', Lang.bind(this, this._onSuspendOrPowerOffActivate));
+        this._suspendOrPowerOffItem = item;
+        this._updateSuspendOrPowerOff();
     },
 
     _updatePresenceStatus: function(item, event) {
@@ -769,6 +782,13 @@ const UserMenuButton = new Lang.Class({
     _onQuitSessionActivate: function() {
         Main.overview.hide();
         this._session.LogoutRemote(0);
+    },
+
+    _onInstallUpdatesActivate: function() {
+        Main.overview.hide();
+        Util.spawn(['pkexec', '/usr/libexec/pk-trigger-offline-update']);
+
+        this._session.RebootRemote();
     },
 
     _onSuspendOrPowerOffActivate: function() {

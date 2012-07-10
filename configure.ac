@@ -1,5 +1,5 @@
 AC_PREREQ(2.63)
-AC_INIT([gnome-shell],[3.5.2],[https://bugzilla.gnome.org/enter_bug.cgi?product=gnome-shell],[gnome-shell])
+AC_INIT([gnome-shell],[3.5.3],[https://bugzilla.gnome.org/enter_bug.cgi?product=gnome-shell],[gnome-shell])
 
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_SRCDIR([src/shell-global.c])
@@ -44,15 +44,15 @@ AC_SUBST(PYTHON)
 
 # We need at least this, since gst_plugin_register_static() was added
 # in 0.10.16, but nothing older than 0.10.21 has been tested.
-GSTREAMER_MIN_VERSION=0.10.16
+GSTREAMER_MIN_VERSION=0.11.92
 
 recorder_modules=
 build_recorder=false
 AC_MSG_CHECKING([for GStreamer (needed for recording functionality)])
-if $PKG_CONFIG --exists gstreamer-0.10 '>=' $GSTREAMER_MIN_VERSION ; then
+if $PKG_CONFIG --exists gstreamer-1.0 '>=' $GSTREAMER_MIN_VERSION ; then
    AC_MSG_RESULT(yes)
    build_recorder=true
-   recorder_modules="gstreamer-0.10 gstreamer-base-0.10 x11"
+   recorder_modules="gstreamer-1.0 gstreamer-base-1.0 x11"
    PKG_CHECK_MODULES(TEST_SHELL_RECORDER, $recorder_modules clutter-1.0 xfixes gl)
 else
    AC_MSG_RESULT(no)
@@ -62,9 +62,8 @@ AM_CONDITIONAL(BUILD_RECORDER, $build_recorder)
 
 CLUTTER_MIN_VERSION=1.9.16
 GOBJECT_INTROSPECTION_MIN_VERSION=0.10.1
-GJS_MIN_VERSION=1.29.18
-MUTTER_MIN_VERSION=3.5.2
-FOLKS_MIN_VERSION=0.5.2
+GJS_MIN_VERSION=1.33.2
+MUTTER_MIN_VERSION=3.5.3
 GTK_MIN_VERSION=3.3.9
 GIO_MIN_VERSION=2.31.6
 LIBECAL_MIN_VERSION=3.5.3
@@ -76,16 +75,17 @@ POLKIT_MIN_VERSION=0.100
 STARTUP_NOTIFICATION_MIN_VERSION=0.11
 GCR_MIN_VERSION=3.3.90
 GNOME_DESKTOP_REQUIRED_VERSION=3.5.1
+GNOME_MENUS_REQUIRED_VERSION=3.5.3
 
 # Collect more than 20 libraries for a prize!
 PKG_CHECK_MODULES(GNOME_SHELL, gio-unix-2.0 >= $GIO_MIN_VERSION
 			       libxml-2.0
                                gtk+-3.0 >= $GTK_MIN_VERSION
                                atk-bridge-2.0
-                               folks >= $FOLKS_MIN_VERSION
                                libmutter >= $MUTTER_MIN_VERSION
                                gjs-internals-1.0 >= $GJS_MIN_VERSION
-			       libgnome-menu-3.0 $recorder_modules
+			       libgnome-menu-3.0 >= $GNOME_MENUS_REQUIRED_VERSION
+                               $recorder_modules
                                gdk-x11-3.0 libsoup-2.4
                                gl
 			       clutter-x11-1.0 >= $CLUTTER_MIN_VERSION
@@ -249,6 +249,7 @@ AC_CONFIG_FILES([
   docs/reference/st/Makefile
   docs/reference/st/st-docs.sgml
   js/Makefile
+  src/calendar-server/evolution-calendar.desktop.in
   src/Makefile
   browser-plugin/Makefile
   tests/Makefile

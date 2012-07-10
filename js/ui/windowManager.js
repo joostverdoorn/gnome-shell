@@ -94,6 +94,7 @@ const WindowManager = new Lang.Class({
         this._unmaximizing = [];
         this._mapping = [];
         this._destroying = [];
+        this._movingWindow = null;
 
         this._dimmedWindows = [];
 
@@ -124,6 +125,14 @@ const WindowManager = new Lang.Class({
         Meta.keybindings_set_custom_handler('switch-to-workspace-up',
                                             Lang.bind(this, this._showWorkspaceSwitcher));
         Meta.keybindings_set_custom_handler('switch-to-workspace-down',
+                                            Lang.bind(this, this._showWorkspaceSwitcher));
+        Meta.keybindings_set_custom_handler('move-to-workspace-left',
+                                            Lang.bind(this, this._showWorkspaceSwitcher));
+        Meta.keybindings_set_custom_handler('move-to-workspace-right',
+                                            Lang.bind(this, this._showWorkspaceSwitcher));
+        Meta.keybindings_set_custom_handler('move-to-workspace-up',
+                                            Lang.bind(this, this._showWorkspaceSwitcher));
+        Meta.keybindings_set_custom_handler('move-to-workspace-down',
                                             Lang.bind(this, this._showWorkspaceSwitcher));
         Meta.keybindings_set_custom_handler('switch-windows',
                                             Lang.bind(this, this._startAppSwitcher));
@@ -465,11 +474,13 @@ const WindowManager = new Lang.Class({
         this._switchData = switchData;
         switchData.inGroup = new Clutter.Group();
         switchData.outGroup = new Clutter.Group();
+        switchData.movingWindowBin = new Clutter.Group();
         switchData.windows = [];
 
         let wgroup = global.window_group;
         wgroup.add_actor(switchData.inGroup);
         wgroup.add_actor(switchData.outGroup);
+        wgroup.add_actor(switchData.movingWindowBin);
 
         for (let i = 0; i < windows.length; i++) {
             let window = windows[i];
@@ -477,7 +488,12 @@ const WindowManager = new Lang.Class({
             if (!window.meta_window.showing_on_its_workspace())
                 continue;
 
-            if (window.get_workspace() == from) {
+            if (this._movingWindow && window.meta_window == this._movingWindow) {
+                switchData.movingWindow = { window: window,
+                                            parent: window.get_parent() };
+                switchData.windows.push(switchData.movingWindow);
+                window.reparent(switchData.movingWindowBin);
+            } else if (window.get_workspace() == from) {
                 switchData.windows.push({ window: window,
                                           parent: window.get_parent() });
                 window.reparent(switchData.outGroup);
@@ -491,6 +507,8 @@ const WindowManager = new Lang.Class({
 
         switchData.inGroup.set_position(-xDest, -yDest);
         switchData.inGroup.raise_top();
+
+        switchData.movingWindowBin.raise_top();
 
         Tweener.addTween(switchData.outGroup,
                          { x: xDest,
@@ -529,6 +547,10 @@ const WindowManager = new Lang.Class({
         Tweener.removeTweens(switchData.outGroup);
         switchData.inGroup.destroy();
         switchData.outGroup.destroy();
+        switchData.movingWindowBin.destroy();
+
+        if (this._movingWindow)
+            this._movingWindow = null;
 
         shellwm.completed_switch_workspace();
     },
@@ -563,73 +585,45 @@ const WindowManager = new Lang.Class({
         if (this._workspaceSwitcherPopup == null)
             this._workspaceSwitcherPopup = new WorkspaceSwitcherPopup.WorkspaceSwitcherPopup();
 
-        if (binding.get_name() == 'switch-to-workspace-up')
-            this.actionMoveWorkspaceUp();
-        else if (binding.get_name() == 'switch-to-workspace-down')
-            this.actionMoveWorkspaceDown();
-        // left/right would effectively act as synonyms for up/down if we enabled them;
-        // but that could be considered confusing.
-        // else if (binding.get_name() == 'switch-to-workspace-left')
-        //   this.actionMoveWorkspaceLeft();
-        // else if (binding.get_name() == 'switch-to-workspace-right')
-        //   this.actionMoveWorkspaceRight();
+        let [action,,,direction] = binding.get_name().split('-');
+        let direction = Meta.MotionDirection[direction.toUpperCase()];
+
+        if (direction != Meta.MotionDirection.UP &&
+            direction != Meta.MotionDirection.DOWN)
+            return;
+
+        if (action == 'switch')
+            this.actionMoveWorkspace(direction);
+        else
+            this.actionMoveWindow(window, direction);
     },
 
-    actionMoveWorkspaceLeft: function() {
-        let rtl = (Clutter.get_default_text_direction() == Clutter.TextDirection.RTL);
-        let activeWorkspaceIndex = global.screen.get_active_workspace_index();
-        let indexToActivate = activeWorkspaceIndex;
-        if (rtl && activeWorkspaceIndex < global.screen.n_workspaces - 1)
-            indexToActivate++;
-        else if (!rtl && activeWorkspaceIndex > 0)
-            indexToActivate--;
+    actionMoveWorkspace: function(direction) {
+        let activeWorkspace = global.screen.get_active_workspace();
+        let toActivate = activeWorkspace.get_neighbor(direction);
 
-        if (indexToActivate != activeWorkspaceIndex)
-            global.screen.get_workspace_by_index(indexToActivate).activate(global.get_current_time());
-
+        if (activeWorkspace != toActivate)
+            toActivate.activate(global.get_current_time());
         if (!Main.overview.visible)
-            this._workspaceSwitcherPopup.display(WorkspaceSwitcherPopup.UP, indexToActivate);
+            this._workspaceSwitcherPopup.display(direction, toActivate.index());
     },
 
-    actionMoveWorkspaceRight: function() {
-        let rtl = (Clutter.get_default_text_direction() == Clutter.TextDirection.RTL);
-        let activeWorkspaceIndex = global.screen.get_active_workspace_index();
-        let indexToActivate = activeWorkspaceIndex;
-        if (rtl && activeWorkspaceIndex > 0)
-            indexToActivate--;
-        else if (!rtl && activeWorkspaceIndex < global.screen.n_workspaces - 1)
-            indexToActivate++;
+    actionMoveWindow: function(window, direction) {
+        let activeWorkspace = global.screen.get_active_workspace();
+        let toActivate = activeWorkspace.get_neighbor(direction);
 
-        if (indexToActivate != activeWorkspaceIndex)
-            global.screen.get_workspace_by_index(indexToActivate).activate(global.get_current_time());
+        if (activeWorkspace != toActivate) {
+            // This won't have any effect for "always sticky" windows
+            // (like desktop windows or docks)
+
+            this._movingWindow = window;
+            window.change_workspace(toActivate);
+
+            global.display.clear_mouse_mode();
+            toActivate.activate_with_focus (window, global.get_current_time());
+        }
 
         if (!Main.overview.visible)
-            this._workspaceSwitcherPopup.display(WorkspaceSwitcherPopup.DOWN, indexToActivate);
+            this._workspaceSwitcherPopup.display(direction, toActivate.index());
     },
-
-    actionMoveWorkspaceUp: function() {
-        let activeWorkspaceIndex = global.screen.get_active_workspace_index();
-        let indexToActivate = activeWorkspaceIndex;
-        if (activeWorkspaceIndex > 0)
-            indexToActivate--;
-
-        if (indexToActivate != activeWorkspaceIndex)
-            global.screen.get_workspace_by_index(indexToActivate).activate(global.get_current_time());
-
-        if (!Main.overview.visible)
-            this._workspaceSwitcherPopup.display(WorkspaceSwitcherPopup.UP, indexToActivate);
-    },
-
-    actionMoveWorkspaceDown: function() {
-        let activeWorkspaceIndex = global.screen.get_active_workspace_index();
-        let indexToActivate = activeWorkspaceIndex;
-        if (activeWorkspaceIndex < global.screen.n_workspaces - 1)
-            indexToActivate++;
-
-        if (indexToActivate != activeWorkspaceIndex)
-            global.screen.get_workspace_by_index(indexToActivate).activate(global.get_current_time());
-
-        if (!Main.overview.visible)
-            this._workspaceSwitcherPopup.display(WorkspaceSwitcherPopup.DOWN, indexToActivate);
-    }
 });

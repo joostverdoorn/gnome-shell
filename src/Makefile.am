@@ -109,7 +109,6 @@ shell_public_headers_h =		\
 	shell-app.h			\
 	shell-app-system.h		\
 	shell-app-usage.h		\
-	shell-contact-system.h	\
 	shell-embedded-window.h		\
 	shell-generic-container.h	\
 	shell-gtk-embed.h		\
@@ -155,7 +154,6 @@ libgnome_shell_la_SOURCES =		\
 	shell-app.c			\
 	shell-app-system.c		\
 	shell-app-usage.c		\
-	shell-contact-system.c	\
 	shell-embedded-window.c		\
 	shell-generic-container.c	\
 	shell-gtk-embed.c		\
@@ -184,7 +182,6 @@ libgnome_shell_la_SOURCES =		\
 	shell-wm.c			\
 	shell-xfixes-cursor.c		\
 	$(NULL)
-
 
 libgnome_shell_la_gir_sources = \
 	$(filter-out %-private.h $(shell_private_sources), $(shell_public_headers_h) $(libgnome_shell_la_SOURCES))
@@ -301,7 +298,7 @@ libgnome_shell_la_LIBADD =		\
 libgnome_shell_la_CPPFLAGS = $(gnome_shell_cflags)
 
 Shell-0.1.gir: libgnome-shell.la St-1.0.gir
-Shell_0_1_gir_INCLUDES = Clutter-1.0 ClutterX11-1.0 Meta-3.0 TelepathyGLib-0.12 TelepathyLogger-0.2 Soup-2.4 GMenu-3.0 NetworkManager-1.0 NMClient-1.0 Folks-0.6
+Shell_0_1_gir_INCLUDES = Clutter-1.0 ClutterX11-1.0 Meta-3.0 TelepathyGLib-0.12 TelepathyLogger-0.2 Soup-2.4 GMenu-3.0 NetworkManager-1.0 NMClient-1.0
 Shell_0_1_gir_CFLAGS = $(libgnome_shell_la_CPPFLAGS) -I $(srcdir)
 Shell_0_1_gir_LIBS = libgnome-shell.la
 Shell_0_1_gir_FILES = $(libgnome_shell_la_gir_sources)

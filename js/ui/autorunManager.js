@@ -23,12 +23,14 @@ const AutorunSetting = {
 };
 
 // misc utils
-function ignoreAutorunForMount(mount) {
+function shouldAutorunMount(mount, forTransient) {
     let root = mount.get_root();
     let volume = mount.get_volume();
 
-    if ((root.is_native() && !isMountRootHidden(root)) ||
-        (volume && volume.allowAutorun && volume.should_automount()))
+    if (!volume || (!volume.allowAutorun && forTransient))
+        return false;
+
+    if (!root.is_native() || isMountRootHidden(root))
         return false;
 
     return true;
@@ -224,11 +226,9 @@ const AutorunManager = new Lang.Class({
         try {
             mount.unmount_with_operation_finish(res);
         } catch (e) {
-            // FIXME: we need to ignore G_IO_ERROR_FAILED_HANDLED errors here
-            // but we can't access the error code from JS.
-            // See https://bugzilla.gnome.org/show_bug.cgi?id=591480
-            log('Unable to eject the mount ' + mount.get_name() 
-                + ': ' + e.toString());
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.FAILED_HANDLED))
+                log('Unable to eject the mount ' + mount.get_name() 
+                    + ': ' + e.toString());
         }
     },
 
@@ -236,11 +236,9 @@ const AutorunManager = new Lang.Class({
         try {
             source.eject_with_operation_finish(res);
         } catch (e) {
-            // FIXME: we need to ignore G_IO_ERROR_FAILED_HANDLED errors here
-            // but we can't access the error code from JS.
-            // See https://bugzilla.gnome.org/show_bug.cgi?id=591480
-            log('Unable to eject the drive ' + source.get_name() 
-                + ': ' + e.toString());
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.FAILED_HANDLED))
+                log('Unable to eject the drive ' + source.get_name()
+                    + ': ' + e.toString());
         }
     },
 
@@ -248,11 +246,9 @@ const AutorunManager = new Lang.Class({
         try {
             drive.stop_finish(res);
         } catch (e) {
-            // FIXME: we need to ignore G_IO_ERROR_FAILED_HANDLED errors here
-            // but we can't access the error code from JS.
-            // See https://bugzilla.gnome.org/show_bug.cgi?id=591480
-            log('Unable to stop the drive ' + drive.get_name() 
-                + ': ' + e.toString());
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.FAILED_HANDLED))
+                log('Unable to stop the drive ' + drive.get_name() 
+                    + ': ' + e.toString());
         }
     },
 });
@@ -270,7 +266,7 @@ const AutorunResidentSource = new Lang.Class({
     },
 
     addMount: function(mount, apps) {
-        if (ignoreAutorunForMount(mount))
+        if (!shouldAutorunMount(mount, false))
             return;
 
         let filtered = this._mounts.filter(function (element) {
@@ -448,7 +444,7 @@ const AutorunTransientDispatcher = new Lang.Class({
             return;
 
         // if the mount doesn't want to be autorun, return
-        if (ignoreAutorunForMount(mount))
+        if (!shouldAutorunMount(mount, true))
             return;
 
         let setting = this._getAutorunSettingForType(contentTypes[0]);

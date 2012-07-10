@@ -437,6 +437,10 @@ StScrollBar StButton#vhandle:hover
     -boxpointer-gap: 4px
 }
 
+#networkMenu {
+    spacing: 4px;
+}
+
 /* User Menu */
 
 #panelUserMenu {
@@ -832,59 +836,9 @@ StScrollBar StButton#vhandle:hover
     transition-duration: 100;
 }
 
-/* Contacts */
-
-.contact-grid {
-    spacing: 36px;
-    -shell-grid-horizontal-item-size: 272px; /* 2 * -shell-grid-horizontal-item-size + spacing */
-    -shell-grid-vertical-item-size: 118px;
-}
-
-.contact {
-    width: 272px; /* Same width as two normal results + spacing */
-    height: 118px; /* Aspect ratio = 1.75. Normal US business card ratio */
-    border-radius: 4px;
-    padding: 3px;
-    border: 1px rgba(0,0,0,0);
-    transition-duration: 100;
-}
-
-.contact-content {
-    border-radius: 7px;
-    padding: 8px;
-    width: 232px;
-    height: 84px;
-    background-color: rgba(0.0, 0.0, 0.0, 0.5);
-    color: white;
-}
-
-.contact-icon {
-    border-radius: 4px;
-}
-
-.contact-details {
-    padding: 0px 6px 22px 10px;
-}
-
-.contact-details-alias {
-    font-size: 18px;
-    padding-bottom: 8px;
-}
-
-.contact-details-status-icon {
-    padding-right: 4px;
-}
-
-.contact:hover {
-    background-color: rgba(255,255,255,0.1);
-    transition-duration: 100;
-}
-
-.contact:focus,
 .app-well-app:focus > .overview-icon,
 .search-result-content:focus > .overview-icon,
 .show-apps:focus > .overview-icon,
-.contact:selected,
 .app-well-app:selected > .overview-icon,
 .search-result-content:selected > .overview-icon {
     background-color: rgba(255,255,255,0.33);
@@ -1096,6 +1050,7 @@ StScrollBar StButton#vhandle:hover
     padding: .4em 1.75em;
     color: #cccccc;
     font-weight: bold;
+    text-align: center;
 }
 
 .calendar-day-base {
@@ -1341,6 +1296,10 @@ StScrollBar StButton#vhandle:hover
 .notification-icon-button > StIcon {
     icon-size: 16px;
     padding: 8px;
+}
+
+.secondary-icon {
+    icon-size: 1.09em;
 }
 
 .hotplug-transient-box {
