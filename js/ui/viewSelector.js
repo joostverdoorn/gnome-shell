@@ -42,13 +42,12 @@ const SearchEntry = new Lang.Class({
         this._text = this.actor.clutter_text;
 
         this.active = false;
+        this.prevActive = false;
 
-        this._text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
         this.actor.connect('notify::mapped', Lang.bind(this, this._onMapped));
 
         Main.overview.connect('showing', Lang.bind(this,
             function () {
-                this.show();
                 this._stageKeyPressId = global.stage.connect('key-press-event',
                                                              Lang.bind(this, this._onStageKeyPress));
             }));
@@ -63,25 +62,7 @@ const SearchEntry = new Lang.Class({
             }));
 
         this._text.connect('text-changed', Lang.bind(this, this._onTextChanged));
-        this._text.connect('key-press-event', Lang.bind(this, function (o, e) {
-            // We can't connect to 'activate' here because search providers
-            // might want to do something with the modifiers in activateDefault.
-            let symbol = e.get_key_symbol();
-            if (symbol == Clutter.Return || symbol == Clutter.KP_Enter) {
-                if (this._searchTimeoutId > 0) {
-                    Mainloop.source_remove(this._searchTimeoutId);
-                    this._doSearch();
-                }
-                Main.overview.viewSelector._searchResults.activateDefault();
-                return true;
-            }
-            return false;
-        }));
-    },
-
-    show: function() {
-
-
+        
     },
 
     hide: function() {
@@ -126,12 +107,9 @@ const SearchEntry = new Lang.Class({
     },
 
     _onTextChanged: function (se, prop) {
-        let searchPreviouslyActive = this.active;
+        this.prevActive = this.active;
         this.active = this.actor.get_text() != '';
-        this._searchPending = this.active && !searchPreviouslyActive;
-        if (this._searchPending) {
-            Main.overview.viewSelector._searchResults.startingSearch();
-        }
+
         if (this.active) {
             this.actor.set_secondary_icon(this._activeIcon);
 
@@ -141,64 +119,11 @@ const SearchEntry = new Lang.Class({
                         this.reset();
                     }));
             }
-
         } else {
             if (this._iconClickedId > 0)
                 this.actor.disconnect(this._iconClickedId);
             this._iconClickedId = 0;
-
-            this.actor.set_secondary_icon(this._inactiveIcon);
-            if(searchPreviouslyActive) {
-                this.reset();
-            }
         }
-        if (!this.active) {
-            if (this._searchTimeoutId > 0) {
-                Mainloop.source_remove(this._searchTimeoutId);
-                this._searchTimeoutId = 0;
-            }
-            return;
-        }
-        if (this._searchTimeoutId > 0)
-            return;
-        this._searchTimeoutId = Mainloop.timeout_add(150, Lang.bind(this, this._doSearch));
-    },
-
-    _onKeyPress: function(entry, event) {
-        let symbol = event.get_key_symbol();
-        if (symbol == Clutter.Escape) {
-            if (this._isActivated()) {
-                this.reset();
-                return true;
-            }
-        } else if (this.active) {
-            let arrowNext, nextDirection;
-            if (entry.get_text_direction() == Clutter.TextDirection.RTL) {
-                arrowNext = Clutter.Left;
-                nextDirection = Gtk.DirectionType.LEFT;
-            } else {
-                arrowNext = Clutter.Right;
-                nextDirection = Gtk.DirectionType.RIGHT;
-            }
-
-            if (symbol == Clutter.Tab) {
-                //this._searchResults.navigateFocus(Gtk.DirectionType.TAB_FORWARD);
-                Main.overview.viewSelector.focusActivePage();
-                return true;
-            } else if (symbol == Clutter.ISO_Left_Tab) {
-                this._focusTrap.can_focus = false;
-                this._searchResults.navigateFocus(Gtk.DirectionType.TAB_BACKWARD);
-                this._focusTrap.can_focus = true;
-                return true;
-            } else if (symbol == Clutter.Down) {
-                this._searchResults.navigateFocus(Gtk.DirectionType.DOWN);
-                return true;
-            } else if (symbol == arrowNext && this._text.position == -1) {
-                this._searchResults.navigateFocus(nextDirection);
-                return true;
-            }
-        }
-        return false;
     },
 
     _onStageKeyPress: function(actor, event) {
@@ -292,7 +217,6 @@ const ViewSelector = new Lang.Class({
         this.addSearchProvider(new ContactDisplay.ContactSearchProvider());
 
         this._searchEntry = new SearchEntry();
-        this.entryActor = this._searchEntry.actor;
         this._searchEntry.connect('reset', Lang.bind(this, 
             function() {
                 if(this._appsPageActive) {
@@ -302,28 +226,31 @@ const ViewSelector = new Lang.Class({
                 }
             }));
 
+        this.entryActor = this._searchEntry.actor;
+        this.entryActor.clutter_text.connect('text-changed', Lang.bind(this, this._onTextChanged));
+        this.entryActor.clutter_text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
+        this.entryActor.clutter_text.connect('key-press-event', Lang.bind(this, function (o, e) {
+            // We can't connect to 'activate' here because search providers
+            // might want to do something with the modifiers in activateDefault.
+            let symbol = e.get_key_symbol();
+            if (symbol == Clutter.Return || symbol == Clutter.KP_Enter) {
+                if (this._searchTimeoutId > 0) {
+                    Mainloop.source_remove(this._searchTimeoutId);
+                    this._doSearch();
+                }
+                Main.overview.viewSelector._searchResults.activateDefault();
+                return true;
+            }
+            return false;
+        }));
+
         this._desktopFade = new St.Bin();
         global.overlay_group.add_actor(this._desktopFade);
 
-        Main.overview.connect('showing', Lang.bind(this,
-            function () {
-                this.show();
-            }));
-
-        Main.overview.connect('shown', Lang.bind(this,
-            function () {
-                this.showDone();
-            }));
-
-        Main.overview.connect('hiding', Lang.bind(this,
-            function () {
-                this.hide();
-            }));
-
-        Main.overview.connect('hidden', Lang.bind(this,
-            function() {
-                this.hideDone();
-            }));
+        Main.overview.connect('showing', Lang.bind(this, this.show));
+        Main.overview.connect('shown',   Lang.bind(this, this.showDone));
+        Main.overview.connect('hiding',  Lang.bind(this, this.hide));
+        Main.overview.connect('hidden',  Lang.bind(this, this.hideDone));
 
         // Public constraints which may be used to tie actors' height or
         // vertical position to the current tab's content; as the content's
@@ -414,10 +341,6 @@ const ViewSelector = new Lang.Class({
         this._searchResults.destroyProviderMeta(provider);
     },
 
-    focusActivePage: function() {
-        this._activePage.child.navigate_focus(null, Gtk.DirectionType.TAB_FORWARD, false);
-    },
-
     _showPage: function(page) {
         if(page == this._activePage && this._prevPage != null)
             return;
@@ -469,14 +392,71 @@ const ViewSelector = new Lang.Class({
         }
     },
 
-    doSearch: function(text) {
-        this._showPage(this._searchPage);
-        this._searchResults.doSearch(text);
+    _onKeyPress: function(entry, event) {
+        let symbol = event.get_key_symbol();
+        if (symbol == Clutter.Escape) {
+            if (this.entryActor.clutter_text.text == this.entryActor.get_text()) {
+                this._searchEntry.reset();
+                return true;
+            }
+        } else if (this._searchEntry.active) {
+            let arrowNext, nextDirection;
+            if (entry.get_text_direction() == Clutter.TextDirection.RTL) {
+                arrowNext = Clutter.Left;
+                nextDirection = Gtk.DirectionType.LEFT;
+            } else {
+                arrowNext = Clutter.Right;
+                nextDirection = Gtk.DirectionType.RIGHT;
+            }
+
+            if (symbol == Clutter.Tab) {
+                this._activePage.child.navigate_focus(null, Gtk.DirectionType.TAB_FORWARD, false);
+                return true;
+            } else if (symbol == Clutter.ISO_Left_Tab) {
+                this._focusTrap.can_focus = false;
+                this._searchResults.navigateFocus(Gtk.DirectionType.TAB_BACKWARD);
+                this._focusTrap.can_focus = true;
+                return true;
+            } else if (symbol == Clutter.Down) {
+                this._searchResults.navigateFocus(Gtk.DirectionType.DOWN);
+                return true;
+            } else if (symbol == arrowNext && this._text.position == -1) {
+                this._searchResults.navigateFocus(nextDirection);
+                return true;
+            }
+        }
+        return false;
     },
 
-    resetSearch: function() {
-        
-        this._searchEntry.reset();
+    _onTextChanged: function (se, prop) {
+        this._searchPending = this._searchEntry.active && !this._searchEntry.prevActive;
+        if (this._searchPending) {
+            this._searchResults.startingSearch();
+        }
+
+        if (!this._searchEntry.active)  {
+            if(this._searchEntry.prevActive) {
+                this._searchEntry.reset();
+            }
+
+            if (this._searchTimeoutId > 0) {
+                Mainloop.source_remove(this._searchTimeoutId);
+                this._searchTimeoutId = 0;
+            }
+            return;
+        }
+
+        if (this._searchTimeoutId > 0)
+            return;
+        this._searchTimeoutId = Mainloop.timeout_add(150, Lang.bind(this, this._doSearch));
+    },
+
+    _doSearch: function() {
+        this._searchTimeoutId = 0;
+        let text = this.entryActor.clutter_text.get_text().replace(/^\s+/g, '').replace(/\s+$/g, '');
+
+        this._showPage(this._searchPage);
+        this._searchResults.doSearch(text);
     }
 });
 Signals.addSignalMethods(ViewSelector.prototype);
