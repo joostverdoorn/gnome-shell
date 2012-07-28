@@ -101,7 +101,7 @@ const SearchTab = new Lang.Class({
     Name: 'SearchTab',
     Extends: BaseTab,
 
-    _init: function() {
+    _init: function(searchEntry) {
         this.active = false;
         this._searchPending = false;
         this._searchTimeoutId = 0;
@@ -109,7 +109,7 @@ const SearchTab = new Lang.Class({
         this._searchSystem = new Search.SearchSystem();
         this._openSearchSystem = new Search.OpenSearchSystem();
 
-        this._searchEntry = new SearchEntry();
+        this._searchEntry = searchEntry;
         this._searchEntry.connect('search-started', Lang.bind(this,
             function() {
                 this._searchResults.startingSearch();
@@ -131,7 +131,7 @@ const SearchTab = new Lang.Class({
         this._iconClickedId = 0;
 
         this._searchResults = new SearchDisplay.SearchResults(this._searchSystem, this._openSearchSystem);
-        this.parent(this._searchEntry.actor, this._searchResults.actor, _("Search"), 'edit-find');
+        this.parent(new St.Bin(), this._searchResults.actor, _("Search"), 'edit-find');
 
         global.stage.connect('notify::key-focus', Lang.bind(this, this._onStageKeyFocusChanged));
 
@@ -409,7 +409,7 @@ Signals.addSignalMethods(SearchEntry.prototype);
 const ViewSelector = new Lang.Class({
     Name: 'ViewSelector',
 
-    _init : function() {
+    _init : function(searchEntry) {
         this.actor = new St.BoxLayout({ name: 'viewSelector',
                                         vertical: true });
 
@@ -445,7 +445,7 @@ const ViewSelector = new Lang.Class({
         this._tabs = [];
         this._activeTab = null;
 
-        this._searchTab = new SearchTab();
+        this._searchTab = new SearchTab(searchEntry);
         this._searchArea.set_child(this._searchTab.title);
         this._addTab(this._searchTab);
 

@@ -186,7 +186,10 @@ const Overview = new Lang.Class({
 
         this._shellInfo = new ShellInfo();
 
-        this._viewSelector = new ViewSelector.ViewSelector();
+        this._searchEntry = new ViewSelector.SearchEntry();
+        this._group.add_actor(this._searchEntry.actor);
+
+        this._viewSelector = new ViewSelector.ViewSelector(this._searchEntry);
         this._group.add_actor(this._viewSelector.actor);
 
         // Load remote search providers provided by applications
@@ -481,10 +484,15 @@ const Overview = new Lang.Class({
         this._coverPane.set_position(0, contentY);
         this._coverPane.set_size(primary.width, contentHeight);
 
+        let searchWidth = this._searchEntry.actor.get_width();
+        let searchHeight = this._searchEntry.actor.get_height();
+        let searchX = (primary.width - searchWidth) / 2;
+        let searchY = contentY + this._spacing;
+
         let dashWidth = Math.round(DASH_SPLIT_FRACTION * primary.width);
         let viewWidth = primary.width - dashWidth - this._spacing;
-        let viewHeight = contentHeight - 2 * this._spacing;
-        let viewY = contentY + this._spacing;
+        let viewHeight = contentHeight - 2 * this._spacing - searchHeight;
+        let viewY = contentY + this._spacing + searchHeight;
         let viewX = rtl ? 0 : dashWidth + this._spacing;
 
         // Set the dash's x position - y is handled by a constraint
@@ -497,6 +505,7 @@ const Overview = new Lang.Class({
         }
         this._dash.actor.set_x(dashX);
 
+        this._searchEntry.actor.set_position(searchX, searchY);
         this._viewSelector.actor.set_position(viewX, viewY);
         this._viewSelector.actor.set_size(viewWidth, viewHeight);
     },
