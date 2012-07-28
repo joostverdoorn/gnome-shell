@@ -109,48 +109,29 @@ const SearchTab = new Lang.Class({
         this._searchSystem = new Search.SearchSystem();
         this._openSearchSystem = new Search.OpenSearchSystem();
 
-        this._entry = new St.Entry({ name: 'searchEntry',
-                                     /* Translators: this is the text displayed
-                                        in the search entry when no search is
-                                        active; it should not exceed ~30
-                                        characters. */
-                                     hint_text: _("Type to search..."),
-                                     track_hover: true,
-                                     can_focus: true });
-        ShellEntry.addContextMenu(this._entry);
-        this._text = this._entry.clutter_text;
-        this._text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
-
-        this._inactiveIcon = new St.Icon({ style_class: 'search-entry-icon',
-                                           icon_name: 'edit-find',
-                                           icon_type: St.IconType.SYMBOLIC });
-        this._activeIcon = new St.Icon({ style_class: 'search-entry-icon',
-                                         icon_name: 'edit-clear',
-                                         icon_type: St.IconType.SYMBOLIC });
-        this._entry.set_secondary_icon(this._inactiveIcon);
-
-        this._iconClickedId = 0;
-
-        this._searchResults = new SearchDisplay.SearchResults(this._searchSystem, this._openSearchSystem);
-        this.parent(this._entry, this._searchResults.actor, _("Search"), 'edit-find');
-
-        this._text.connect('text-changed', Lang.bind(this, this._onTextChanged));
-        this._text.connect('key-press-event', Lang.bind(this, function (o, e) {
-            // We can't connect to 'activate' here because search providers
-            // might want to do something with the modifiers in activateDefault.
-            let symbol = e.get_key_symbol();
-            if (symbol == Clutter.Return || symbol == Clutter.KP_Enter) {
+        this._searchEntry = new SearchEntry();
+        this._searchEntry.connect('search-started', Lang.bind(this,
+            function() {
+                this._searchResults.startingSearch();
+                this._activate();
+            }));
+        // FIXME
+        //this._searchEntry.connect('reset', Lang.bind(this, this.hide));
+        this._searchEntry.connect('activate', Lang.bind(this,
+            function() {
                 if (this._searchTimeoutId > 0) {
                     Mainloop.source_remove(this._searchTimeoutId);
                     this._doSearch();
                 }
                 this._searchResults.activateDefault();
-                return true;
-            }
-            return false;
-        }));
+            }));
+        this._text = this._searchEntry.actor.clutter_text;
+        this._text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
 
-        this._entry.connect('notify::mapped', Lang.bind(this, this._onMapped));
+        this._iconClickedId = 0;
+
+        this._searchResults = new SearchDisplay.SearchResults(this._searchSystem, this._openSearchSystem);
+        this.parent(this._searchEntry.actor, this._searchResults.actor, _("Search"), 'edit-find');
 
         global.stage.connect('notify::key-focus', Lang.bind(this, this._onStageKeyFocusChanged));
 
@@ -168,7 +149,7 @@ const SearchTab = new Lang.Class({
         // include the entry in the keynav tab path...
         this._focusTrap = new St.Bin({ can_focus: true });
         this._focusTrap.connect('key-focus-in', Lang.bind(this, function() {
-            this._entry.grab_key_focus();
+            this._searchEntry.actor.grab_key_focus();
         }));
         // ... but make it unfocusable using arrow keys keynav by making its
         // bounding box always contain the possible focus source's bounding
@@ -195,40 +176,14 @@ const SearchTab = new Lang.Class({
     },
 
     reset: function () {
-        global.stage.set_key_focus(null);
-
-        this._entry.text = '';
-
-        this._text.set_cursor_visible(true);
-        this._text.set_selection(0, 0);
+        this._searchEntry.reset();
     },
 
     _onStageKeyFocusChanged: function() {
         let focus = global.stage.get_key_focus();
-        let appearFocused = (this._entry.contains(focus) ||
+        let appearFocused = (this._searchEntry.actor.contains(focus) ||
                              this._searchResults.actor.contains(focus));
-
-        this._text.set_cursor_visible(appearFocused);
-
-        if (appearFocused)
-            this._entry.add_style_pseudo_class('focus');
-        else
-            this._entry.remove_style_pseudo_class('focus');
-    },
-
-    _onMapped: function() {
-        if (this._entry.mapped) {
-            // Enable 'find-as-you-type'
-            this._capturedEventId = global.stage.connect('captured-event',
-                                 Lang.bind(this, this._onCapturedEvent));
-            this._text.set_cursor_visible(true);
-            this._text.set_selection(0, 0);
-        } else {
-            // Disable 'find-as-you-type'
-            if (this._capturedEventId > 0)
-                global.stage.disconnect(this._capturedEventId);
-            this._capturedEventId = 0;
-        }
+        this._searchEntry.appearFocused = appearFocused;
     },
 
     addSearchProvider: function(provider) {
@@ -246,35 +201,154 @@ const SearchTab = new Lang.Class({
         this._text.event(event, false);
     },
 
-    // the entry does not show the hint
+    _onKeyPress: function(entry, event) {
+        if (!this._searchEntry.active)
+            return false;
+
+        let symbol = event.get_key_symbol();
+        let arrowNext, nextDirection;
+        if (entry.get_text_direction() == Clutter.TextDirection.RTL) {
+            arrowNext = Clutter.Left;
+            nextDirection = Gtk.DirectionType.LEFT;
+        } else {
+            arrowNext = Clutter.Right;
+            nextDirection = Gtk.DirectionType.RIGHT;
+        }
+
+        if (symbol == Clutter.Tab) {
+            this._searchResults.navigateFocus(Gtk.DirectionType.TAB_FORWARD);
+            return true;
+        } else if (symbol == Clutter.ISO_Left_Tab) {
+            this._focusTrap.can_focus = false;
+            this._searchResults.navigateFocus(Gtk.DirectionType.TAB_BACKWARD);
+            this._focusTrap.can_focus = true;
+            return true;
+        } else if (symbol == Clutter.Down) {
+            this._searchResults.navigateFocus(Gtk.DirectionType.DOWN);
+            return true;
+        } else if (symbol == arrowNext && this._text.position == -1) {
+            this._searchResults.navigateFocus(nextDirection);
+            return true;
+        }
+
+        return false;
+    },
+
+    _doSearch: function () {
+        this._searchTimeoutId = 0;
+        let text = this._text.get_text().replace(/^\s+/g, '').replace(/\s+$/g, '');
+        this._searchResults.doSearch(text);
+
+        return false;
+    }
+});
+
+
+const SearchEntry = new Lang.Class({
+    Name: 'SearchEntry',
+
+    _init: function() {
+        this.actor = new St.Entry({ name: 'searchEntry',
+                                     hint_text: _("Type to search..."),
+                                     track_hover: true,
+                                     can_focus: true });
+        ShellEntry.addContextMenu(this.actor);
+
+        this._inactiveIcon = new St.Icon({ style_class: 'search-entry-icon',
+                                           icon_name: 'edit-find',
+                                           icon_type: St.IconType.SYMBOLIC });
+        this._activeIcon = new St.Icon({ style_class: 'search-entry-icon',
+                                         icon_name: 'edit-clear',
+                                         icon_type: St.IconType.SYMBOLIC });
+        this.actor.set_secondary_icon(this._inactiveIcon);
+
+        this._text = this.actor.clutter_text;
+
+        this.active = false;
+
+        this._text.connect('key-press-event', Lang.bind(this, this._onKeyPress));
+        this.actor.connect('notify::mapped', Lang.bind(this, this._onMapped));
+
+        this._text.connect('text-changed', Lang.bind(this, this._onTextChanged));
+    },
+
+    hide: function() {
+        if(this.active)
+            this.reset();
+    },
+
+    reset: function() {
+        global.stage.set_key_focus(null);
+
+        this.actor.text = '';
+
+        this._text.set_cursor_visible(true);
+        this._text.set_selection(0, 0);
+
+        this.emit('reset');
+    },
+
+    _startSearch: function(event) {
+        global.stage.set_key_focus(this._text);
+        this._text.event(event, false);
+    },
+
     _isActivated: function() {
-        return this._text.text == this._entry.get_text();
+        return this._text.text == this.actor.get_text();
+    },
+
+    _onMapped: function() {
+        if (this.actor.mapped) {
+            // Enable 'find-as-you-type'
+            this._capturedEventId = global.stage.connect('captured-event',
+                                 Lang.bind(this, this._onCapturedEvent));
+            this._text.set_cursor_visible(true);
+            this._text.set_selection(0, 0);
+        } else {
+           // Disable 'find-as-you-type'
+            if (this._capturedEventId > 0)
+                global.stage.disconnect(this._capturedEventId);
+            this._capturedEventId = 0;
+        }
+    },
+
+    get appearFocused() {
+        return this.actor.has_style_pseudo_class('focus');
+    },
+
+    set appearFocused(focus) {
+        this._text.set_cursor_visible(focus);
+        if (focus)
+            this.actor.add_style_pseudo_class('focus');
+        else
+            this.actor.remove_style_pseudo_class('focus');
     },
 
     _onTextChanged: function (se, prop) {
         let searchPreviouslyActive = this.active;
-        this.active = this._entry.get_text() != '';
+        this.active = this.actor.get_text() != '';
         this._searchPending = this.active && !searchPreviouslyActive;
         if (this._searchPending) {
-            this._searchResults.startingSearch();
+            this.emit('search-started');
         }
         if (this.active) {
-            this._entry.set_secondary_icon(this._activeIcon);
+            this.actor.set_secondary_icon(this._activeIcon);
 
             if (this._iconClickedId == 0) {
-                this._iconClickedId = this._entry.connect('secondary-icon-clicked',
+                this._iconClickedId = this.actor.connect('secondary-icon-clicked',
                     Lang.bind(this, function() {
                         this.reset();
                     }));
             }
-            this._activate();
         } else {
             if (this._iconClickedId > 0)
-                this._entry.disconnect(this._iconClickedId);
+                this.actor.disconnect(this._iconClickedId);
             this._iconClickedId = 0;
 
-            this._entry.set_secondary_icon(this._inactiveIcon);
-            this.emit('search-cancelled');
+            this.actor.set_secondary_icon(this._inactiveIcon);
+            if(searchPreviouslyActive) {
+                this.reset();
+            }
         }
         if (!this.active) {
             if (this._searchTimeoutId > 0) {
@@ -295,31 +369,12 @@ const SearchTab = new Lang.Class({
                 this.reset();
                 return true;
             }
-        } else if (this.active) {
-            let arrowNext, nextDirection;
-            if (entry.get_text_direction() == Clutter.TextDirection.RTL) {
-                arrowNext = Clutter.Left;
-                nextDirection = Gtk.DirectionType.LEFT;
-            } else {
-                arrowNext = Clutter.Right;
-                nextDirection = Gtk.DirectionType.RIGHT;
-            }
-
-            if (symbol == Clutter.Tab) {
-                this._searchResults.navigateFocus(Gtk.DirectionType.TAB_FORWARD);
-                return true;
-            } else if (symbol == Clutter.ISO_Left_Tab) {
-                this._focusTrap.can_focus = false;
-                this._searchResults.navigateFocus(Gtk.DirectionType.TAB_BACKWARD);
-                this._focusTrap.can_focus = true;
-                return true;
-            } else if (symbol == Clutter.Down) {
-                this._searchResults.navigateFocus(Gtk.DirectionType.DOWN);
-                return true;
-            } else if (symbol == arrowNext && this._text.position == -1) {
-                this._searchResults.navigateFocus(nextDirection);
-                return true;
-            }
+        } else if (symbol == Clutter.Return || symbol == Clutter.KP_Enter) {
+            // Define our own 'activate' signal here, because search providers
+            // might want to do something with the modifiers in activateDefault,
+            // which ClutterText::activate doesn't allow
+            this.emit('activate');
+            return true;
         }
         return false;
     },
@@ -342,11 +397,13 @@ const SearchTab = new Lang.Class({
     _doSearch: function () {
         this._searchTimeoutId = 0;
         let text = this._text.get_text().replace(/^\s+/g, '').replace(/\s+$/g, '');
-        this._searchResults.doSearch(text);
+        // FIXME
+        Main.overview._viewSelector._searchTab._doSearch(text);
 
         return false;
     }
 });
+Signals.addSignalMethods(SearchEntry.prototype);
 
 
 const ViewSelector = new Lang.Class({
